@@ -194,7 +194,7 @@ async def bitbucket_webhook(
 
     # Parse payload
     try:
-        data = json.loads(payload)
+        data = json.loads(payload.decode('utf-8'))
         webhook_payload = BitbucketWebhookPayload(**data)
     except Exception as e:
         logger.error(f"Failed to parse webhook payload: {e}")
