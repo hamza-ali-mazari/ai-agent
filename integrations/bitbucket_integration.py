@@ -67,6 +67,8 @@ class BitbucketIntegration:
 
     async def handle_pull_request_event(self, payload: BitbucketWebhookPayload) -> None:
         """Handle Bitbucket pull request events."""
+        logger.info(f"Received event: {payload.eventKey}")
+
         event_actions = [
             "pullrequest:created",
             "pullrequest:updated",
@@ -74,10 +76,12 @@ class BitbucketIntegration:
         ]
 
         if payload.eventKey not in event_actions:
+            logger.info(f"Ignoring event {payload.eventKey}")
             return
 
         pr = payload.pullrequest
         if not pr:
+            logger.info(f"No pullrequest data in payload for event {payload.eventKey}")
             return
 
         repo = payload.repository
