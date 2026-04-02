@@ -85,8 +85,9 @@ class BitbucketIntegration:
             return
 
         repo = payload.repository
+        logger.info(f"Repository data: {repo}")
         workspace = repo.get("workspace", {}).get("slug") or repo.get("owner", {}).get("username")
-        repo_slug = repo["slug"]
+        repo_slug = repo.get("slug") or repo.get("name", "unknown")
         pr_id = pr["id"]
 
         logger.info(f"Processing PR #{pr_id} in {workspace}/{repo_slug}")
