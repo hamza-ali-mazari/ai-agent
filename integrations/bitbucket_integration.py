@@ -126,6 +126,11 @@ class BitbucketIntegration:
             await self.post_review_comments(workspace, repo_slug, pr_id, review_response)
             logger.info(f"Review comments posted for PR #{pr_id}")
 
+            # Post review summary
+            logger.info(f"Posting review summary for PR #{pr_id}")
+            await self.post_review_summary(workspace, repo_slug, pr_id, review_response)
+            logger.info(f"Review summary posted for PR #{pr_id}")
+
             # Post overall review summary
             await self.post_review_summary(workspace, repo_slug, pr_id, review_response)
 
