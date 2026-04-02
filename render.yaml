@@ -1,7 +1,7 @@
 services:
   - type: web
     name: ai-code-review-engine
-    runtime: python3
+    runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -12,7 +12,7 @@ services:
       - key: AZURE_OPENAI_DEPLOYMENT
         sync: false
       - key: AZURE_OPENAI_API_VERSION
-        fromSecret: azure_openai_api_version
+        sync: false
       - key: BITBUCKET_USERNAME
         sync: false
       - key: BITBUCKET_TOKEN
@@ -24,4 +24,4 @@ services:
       - key: GITHUB_WEBHOOK_SECRET
         sync: false
       - key: GITHUB_DEEP_ANALYSIS
-        fromSecret: github_deep_analysis
+        sync: false
