@@ -89,13 +89,17 @@ class BitbucketIntegration:
 
         try:
             # Get PR diff
+            logger.info(f"Getting diff for PR #{pr_id}")
             diff_content = self.get_pull_request_diff(workspace, repo_slug, pr_id)
             if not diff_content:
                 logger.warning(f"No diff content for PR #{pr_id}")
                 return
+            logger.info(f"Got diff content, length: {len(diff_content)}")
 
             # Get all files in PR (for comprehensive review)
+            logger.info(f"Getting PR files for PR #{pr_id}")
             pr_files = self.get_pull_request_files(workspace, repo_slug, pr_id)
+            logger.info(f"Got {len(pr_files)} files in PR")
 
             # Prepare review request
             review_request = {
@@ -113,10 +117,14 @@ class BitbucketIntegration:
             }
 
             # Call AI review engine
+            logger.info(f"Calling AI review engine for PR #{pr_id}")
             review_response = await self.call_review_engine(review_request)
+            logger.info(f"AI review completed for PR #{pr_id}")
 
             # Post review comments to Bitbucket
+            logger.info(f"Posting review comments for PR #{pr_id}")
             await self.post_review_comments(workspace, repo_slug, pr_id, review_response)
+            logger.info(f"Review comments posted for PR #{pr_id}")
 
             # Post overall review summary
             await self.post_review_summary(workspace, repo_slug, pr_id, review_response)
