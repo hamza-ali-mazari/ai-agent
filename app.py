@@ -188,7 +188,7 @@ async def bitbucket_webhook(
     payload = await request.body()
 
     # Verify signature if configured
-    signature = request.headers.get("X-Hub-Signature")
+    signature = request.headers.get("X-Hub-Signature-256")
     if signature and not bitbucket_integration.verify_webhook_signature(payload, signature):
         raise HTTPException(status_code=401, detail="Invalid signature")
 

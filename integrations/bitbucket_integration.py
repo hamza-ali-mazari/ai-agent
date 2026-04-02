@@ -18,8 +18,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 class BitbucketWebhookPayload(BaseModel):
-    eventKey: str
+    eventKey: Optional[str] = None
     pullrequest: Optional[Dict[str, Any]] = None  # Bitbucket uses lowercase
+    push: Optional[Dict[str, Any]] = None
     repository: Dict[str, Any]
     actor: Dict[str, Any]
 
@@ -48,6 +49,12 @@ class BitbucketIntegration:
             payload,
             hashlib.sha256
         ).hexdigest()
+
+        # Bitbucket sends signature as "sha256=hexdigest"
+        if signature.startswith("sha256="):
+            return signature[7:] == expected_signature
+        else:
+            return signature == expected_signature
 
         return hmac.compare_digest(f"sha256={expected_signature}", signature)
 
