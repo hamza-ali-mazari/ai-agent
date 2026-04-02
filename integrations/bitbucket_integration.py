@@ -65,9 +65,9 @@ class BitbucketIntegration:
         else:
             raise ValueError("BITBUCKET_TOKEN is required. App passwords are deprecated - use API tokens instead.")
 
-    async def handle_pull_request_event(self, payload: BitbucketWebhookPayload) -> None:
+    async def handle_pull_request_event(self, payload: BitbucketWebhookPayload, event_key: str = None) -> None:
         """Handle Bitbucket pull request events."""
-        logger.info(f"Received event: {payload.eventKey}")
+        logger.info(f"Received event: {event_key}")
 
         event_actions = [
             "pullrequest:created",
@@ -75,13 +75,13 @@ class BitbucketIntegration:
             "pullrequest:reopened"
         ]
 
-        if payload.eventKey not in event_actions:
-            logger.info(f"Ignoring event {payload.eventKey}")
+        if event_key not in event_actions:
+            logger.info(f"Ignoring event {event_key}")
             return
 
         pr = payload.pullrequest
         if not pr:
-            logger.info(f"No pullrequest data in payload for event {payload.eventKey}")
+            logger.info(f"No pullrequest data in payload for event {event_key}")
             return
 
         repo = payload.repository

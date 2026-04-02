@@ -201,10 +201,14 @@ async def bitbucket_webhook(
         logger.error(f"Failed to parse webhook payload: {e}")
         raise HTTPException(status_code=400, detail="Invalid payload")
 
+    # Get event key from header
+    event_key = request.headers.get("X-Event-Key")
+    logger.info(f"Event key from header: {event_key}")
+
     # Handle the event in background
     background_tasks.add_task(
         bitbucket_integration.handle_pull_request_event,
-        webhook_payload
+        webhook_payload, event_key
     )
 
     return {"status": "accepted"}
