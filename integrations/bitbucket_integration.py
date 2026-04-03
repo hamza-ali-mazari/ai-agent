@@ -10,6 +10,7 @@ import hmac
 import hashlib
 import json
 import requests
+import base64
 from typing import Dict, Any, Optional, List
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -31,7 +32,8 @@ class BitbucketIntegration:
 
     def __init__(self, base_url: str = "http://localhost:8000", is_server: bool = False):
         self.base_url = base_url
-        self.bitbucket_token = os.getenv("BITBUCKET_TOKEN")  # Token-based auth (no username required)
+        self.bitbucket_username = os.getenv("BITBUCKET_USERNAME")
+        self.bitbucket_token = os.getenv("BITBUCKET_TOKEN")  # App password for Basic Auth
         self.webhook_secret = os.getenv("BITBUCKET_WEBHOOK_SECRET")
         self.is_server = is_server  # True for Bitbucket Server/Data Center
 
@@ -58,19 +60,16 @@ class BitbucketIntegration:
         return hmac.compare_digest(f"sha256={expected_signature}", signature)
 
     def get_auth_headers(self) -> Dict[str, str]:
-        """Get authentication headers for Bitbucket API using token-only auth."""
-        if self.bitbucket_token:
-            # Use Bearer token authentication (no username required)
-            return {"Authorization": f"Bearer {self.bitbucket_token}"}
-
-        # Fallback for Bitbucket Server/Data Center
-        server_token = os.getenv("BITBUCKET_SERVER_TOKEN")
-        if self.is_server and server_token:
-            return {"Authorization": f"Bearer {server_token}"}
+        """Get authentication headers for Bitbucket API using Basic Auth."""
+        # For Bitbucket Cloud: use Basic Auth with username:app_password
+        if self.bitbucket_username and self.bitbucket_token:
+            auth_string = f"{self.bitbucket_username}:{self.bitbucket_token}"
+            encoded_auth = base64.b64encode(auth_string.encode()).decode()
+            return {"Authorization": f"Basic {encoded_auth}"}
 
         raise ValueError(
-            "Bitbucket authentication failed. "
-            "Set BITBUCKET_TOKEN for Bitbucket Cloud or BITBUCKET_SERVER_TOKEN for Server/Data Center."
+            "Bitbucket authentication failed. Set BITBUCKET_USERNAME and BITBUCKET_TOKEN for Bitbucket Cloud."
+        )
         )
 
     async def handle_pull_request_event(self, payload: BitbucketWebhookPayload, event_key: str = None) -> None:
