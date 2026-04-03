@@ -206,14 +206,24 @@ class BitbucketIntegration:
             return []
 
     async def call_review_engine(self, review_request: Dict[str, Any]) -> Dict[str, Any]:
-        """Call the AI review engine API."""
-        url = f"{self.base_url}/review"
-        response = requests.post(url, json=review_request)
+        """Call the AI review engine directly."""
+        try:
+            # Import the AI review engine
+            from services.ai_review import analyze_code_diff
+            from models.review import CodeReviewRequest
 
-        if response.status_code == 200:
-            return response.json()
-        else:
-            raise Exception(f"Review engine error: {response.status_code}")
+            # Convert the request dict to CodeReviewRequest model
+            code_review_request = CodeReviewRequest(**review_request)
+
+            # Call the AI review engine directly
+            result = analyze_code_diff(code_review_request)
+
+            # Convert the result back to dict for compatibility
+            return result.dict()
+
+        except Exception as e:
+            logger.error(f"Error calling AI review engine: {str(e)}")
+            raise Exception(f"AI review engine error: {str(e)}")
 
     async def post_review_comments(self, workspace: str, repo_slug: str, pr_id: int, review_response: Dict[str, Any]) -> None:
         """Post individual review comments to Bitbucket PR."""
