@@ -70,7 +70,6 @@ class BitbucketIntegration:
         raise ValueError(
             "Bitbucket authentication failed. Set BITBUCKET_USERNAME and BITBUCKET_TOKEN for Bitbucket Cloud."
         )
-        )
 
     async def handle_pull_request_event(self, payload: BitbucketWebhookPayload, event_key: str = None) -> None:
         """Handle Bitbucket pull request events."""
