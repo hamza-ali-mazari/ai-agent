@@ -10,7 +10,6 @@ import hmac
 import hashlib
 import json
 import requests
-import base64
 from typing import Dict, Any, Optional, List
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -32,8 +31,7 @@ class BitbucketIntegration:
 
     def __init__(self, base_url: str = "http://localhost:8000", is_server: bool = False):
         self.base_url = base_url
-        self.bitbucket_username = os.getenv("BITBUCKET_USERNAME")
-        self.bitbucket_token = os.getenv("BITBUCKET_TOKEN")  # API token for both Cloud and Server
+        self.bitbucket_token = os.getenv("BITBUCKET_TOKEN")  # Token-based auth (no username required)
         self.webhook_secret = os.getenv("BITBUCKET_WEBHOOK_SECRET")
         self.is_server = is_server  # True for Bitbucket Server/Data Center
 
@@ -60,13 +58,20 @@ class BitbucketIntegration:
         return hmac.compare_digest(f"sha256={expected_signature}", signature)
 
     def get_auth_headers(self) -> Dict[str, str]:
-        """Get authentication headers for Bitbucket API."""
-        if not self.bitbucket_username or not self.bitbucket_token:
-            raise ValueError("BITBUCKET_USERNAME and BITBUCKET_TOKEN are required for Bitbucket Cloud.")
-        
-        auth_string = f"{self.bitbucket_username}:{self.bitbucket_token}"
-        encoded_auth = base64.b64encode(auth_string.encode()).decode()
-        return {"Authorization": f"Basic {encoded_auth}"}
+        """Get authentication headers for Bitbucket API using token-only auth."""
+        if self.bitbucket_token:
+            # Use Bearer token authentication (no username required)
+            return {"Authorization": f"Bearer {self.bitbucket_token}"}
+
+        # Fallback for Bitbucket Server/Data Center
+        server_token = os.getenv("BITBUCKET_SERVER_TOKEN")
+        if self.is_server and server_token:
+            return {"Authorization": f"Bearer {server_token}"}
+
+        raise ValueError(
+            "Bitbucket authentication failed. "
+            "Set BITBUCKET_TOKEN for Bitbucket Cloud or BITBUCKET_SERVER_TOKEN for Server/Data Center."
+        )
 
     async def handle_pull_request_event(self, payload: BitbucketWebhookPayload, event_key: str = None) -> None:
         """Handle Bitbucket pull request events."""
@@ -154,10 +159,41 @@ class BitbucketIntegration:
         if response.status_code == 200:
             return response.text
         else:
-            logger.error(f"Failed to get PR diff: {response.status_code}")
+            message = response.text.strip() or response.reason
+            logger.error(
+                f"Failed to get PR diff: {response.status_code} (workspace={workspace} repo={repo_slug} pr={pr_id}) - {message}"
+            )
+            if response.status_code == 401:
+                logger.error(
+                    "Authentication failure when fetching PR diff. "
+                    "Check BITBUCKET_USERNAME, BITBUCKET_TOKEN, BITBUCKET_APP_PASSWORD, BITBUCKET_OAUTH_TOKEN, and BITBUCKET_SERVER_TOKEN."
+                )
             return None
 
     def get_pull_request_files(self, workspace: str, repo_slug: str, pr_id: int) -> List[str]:
+        """Get all files changed in the PR."""
+        url = f"{self.api_base}/repositories/{workspace}/{repo_slug}/pullrequests/{pr_id}/diffstat"
+        headers = self.get_auth_headers()
+
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                return [item["new"]["path"] for item in data.get("values", []) if item.get("new")]
+            else:
+                message = response.text.strip() or response.reason
+                logger.warning(
+                    f"Failed to get PR files: {response.status_code} (workspace={workspace} repo={repo_slug} pr={pr_id}) - {message}"
+                )
+                if response.status_code == 401:
+                    logger.error(
+                        "Authentication failure when fetching PR files. "
+                        "Check Bitbucket credentials and permissions."
+                    )
+                return []
+        except Exception as e:
+            logger.error(f"Error getting PR files: {str(e)}")
+            return []
         """Get all files changed in the PR."""
         url = f"{self.api_base}/repositories/{workspace}/{repo_slug}/pullrequests/{pr_id}/diffstat"
         headers = self.get_auth_headers()
