@@ -10,7 +10,6 @@ import hmac
 import hashlib
 import json
 import requests
-import base64
 from typing import Dict, Any, Optional, List
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -60,15 +59,13 @@ class BitbucketIntegration:
         return hmac.compare_digest(f"sha256={expected_signature}", signature)
 
     def get_auth_headers(self) -> Dict[str, str]:
-        """Get authentication headers for Bitbucket API using Basic Auth."""
-        # For Bitbucket Cloud: use Basic Auth with username:app_password
-        if self.bitbucket_username and self.bitbucket_token:
-            auth_string = f"{self.bitbucket_username}:{self.bitbucket_token}"
-            encoded_auth = base64.b64encode(auth_string.encode()).decode()
-            return {"Authorization": f"Basic {encoded_auth}"}
+        """Get authentication headers for Bitbucket API using Bearer token."""
+        # For Bitbucket Cloud: use Bearer token authentication
+        if self.bitbucket_token:
+            return {"Authorization": f"Bearer {self.bitbucket_token}"}
 
         raise ValueError(
-            "Bitbucket authentication failed. Set BITBUCKET_USERNAME and BITBUCKET_TOKEN for Bitbucket Cloud."
+            "Bitbucket authentication failed. Set BITBUCKET_TOKEN for Bitbucket Cloud."
         )
 
     async def handle_pull_request_event(self, payload: BitbucketWebhookPayload, event_key: str = None) -> None:
