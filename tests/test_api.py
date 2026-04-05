@@ -65,5 +65,40 @@ def test_default_config():
     assert "severity_threshold" in config
     assert "max_comments_per_file" in config
 
+
+def test_bitbucket_get_auth_headers():
+    """Test Bitbucket auth headers priority and presence."""
+    from integrations.bitbucket_integration import BitbucketIntegration
+    integration = BitbucketIntegration()
+
+    import os
+
+    # Temporary env mapping helper in the fixture
+    os.environ.pop("BITBUCKET_OAUTH_TOKEN", None)
+    os.environ.pop("BITBUCKET_APP_PASSWORD", None)
+    os.environ.pop("BITBUCKET_USERNAME", None)
+    os.environ.pop("BITBUCKET_TOKEN", None)
+
+    # Set OAuth token first
+    os.environ["BITBUCKET_OAUTH_TOKEN"] = "oauth-123"
+    headers = integration.get_auth_headers()
+    assert headers["Authorization"] == "Bearer oauth-123"
+
+    # If OAuth token not set, fall back to username+token
+    os.environ.pop("BITBUCKET_OAUTH_TOKEN", None)
+    os.environ.pop("BITBUCKET_APP_PASSWORD", None)
+    os.environ["BITBUCKET_USERNAME"] = "user"
+    os.environ["BITBUCKET_TOKEN"] = "api-token"
+    headers = integration.get_auth_headers()
+    assert headers["Authorization"].startswith("Basic ")
+
+    # If no credentials, ValueError is raised
+    os.environ.pop("BITBUCKET_APP_PASSWORD", None)
+    os.environ.pop("BITBUCKET_USERNAME", None)
+    os.environ.pop("BITBUCKET_TOKEN", None)
+    with pytest.raises(ValueError):
+        integration.get_auth_headers()
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

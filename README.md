@@ -7,10 +7,11 @@ A professional, enterprise-grade AI-powered code review engine designed for seam
 - **Structured Analysis**: Detailed file-by-file code review with severity levels
 - **Multiple Categories**: Bugs, security issues, performance, maintainability, style, best practices
 - **AI-Powered Insights**: Uses advanced language models for intelligent code analysis
+- **Inline Code Suggestions**: Provides actionable code suggestions that can be applied directly in PRs
+- **Multi-Language Support**: Supports 40+ programming languages and file types including Python, JavaScript, TypeScript, Java, C++, Go, Rust, PHP, Ruby, and more
 - **Configurable Rules**: Customizable review criteria and severity thresholds
 - **RESTful API**: Clean, documented API for easy integration
 - **Caching**: Intelligent caching to optimize performance and costs
-- **Multi-Language Support**: Supports Python, JavaScript, TypeScript, Java, and more
 - **Enterprise Ready**: Logging, error handling, and scalability features
 
 ## Project Structure
@@ -174,6 +175,116 @@ Perform comprehensive AI-powered code review.
   ]
 }
 ```
+
+## Inline Code Suggestions
+
+The AI Code Review Engine now supports **inline code suggestions** that can be applied directly within pull request interfaces on GitHub and Bitbucket.
+
+### How It Works
+
+When reviewing code changes, the AI analyzes the diff and generates specific, actionable code replacements for identified issues. These suggestions appear as inline comments that developers can apply with a single click.
+
+### Features
+
+- **GitHub Integration**: Uses ```suggestion blocks for one-click application
+- **Bitbucket Integration**: Provides formatted code suggestions in PR comments
+- **Precise Location**: Suggestions are tied to specific line numbers in the diff
+- **Actionable Fixes**: Each suggestion includes the exact replacement code
+- **Severity-Based**: Suggestions are provided for issues of all severity levels that have clear fixes
+
+### Example
+
+For a security issue like plain-text password storage, the AI might suggest:
+
+**GitHub Format:**
+```markdown
+🔴 Plain text password storage
+
+**Category:** Security  
+**Severity:** High
+
+Storing passwords in plain text is a security vulnerability
+
+**Suggestion:** Use proper password hashing with bcrypt
+
+```suggestion
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+```
+```
+
+**Bitbucket Format:**
+```markdown
+🔴 Plain text password storage
+
+**Category:** Security  
+**Severity:** High
+
+Storing passwords in plain text is a security vulnerability
+
+**Suggestion:** Use proper password hashing with bcrypt
+
+**Suggested change:**
+```diff
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+```
+```
+
+### Supported Languages & File Types
+
+The AI Code Review Engine supports 40+ programming languages and file types:
+
+**Programming Languages:**
+- Python (.py, .pyx, .pyw)
+- JavaScript (.js, .mjs, .cjs, .jsx)
+- TypeScript (.ts, .tsx, .d.ts)
+- Java (.java, .jsp, .jar)
+- C/C++ (.c, .cpp, .cc, .cxx, .h, .hpp)
+- C# (.cs, .csx)
+- Go (.go)
+- Rust (.rs)
+- PHP (.php, .phtml)
+- Ruby (.rb, .rbw)
+- Swift (.swift)
+- Kotlin (.kt, .kts)
+- Scala (.scala, .sc)
+- R (.r, .rmd)
+- Perl (.pl, .pm, .t)
+- Lua (.lua)
+- Dart (.dart)
+- Haskell (.hs)
+- OCaml (.ml)
+- F# (.fs)
+- VB.NET (.vb)
+- Clojure (.clj)
+- Elm (.elm)
+- Elixir (.ex, .exs)
+
+**Scripts & Shell:**
+- Shell scripts (.sh, .bash, .zsh, .fish)
+- PowerShell (.ps1)
+
+**Web Technologies:**
+- HTML (.html, .htm)
+- CSS (.css, .scss, .sass, .less)
+
+**Configuration & Data:**
+- JSON (.json)
+- XML (.xml)
+- YAML (.yaml, .yml)
+- TOML (.toml)
+- INI (.ini, .cfg)
+
+**Database:**
+- SQL (.sql)
+
+The AI automatically detects the language from file extensions and applies language-specific best practices and conventions.
+
+### Benefits
+
+- **Faster Reviews**: Developers can apply fixes instantly without manual implementation
+- **Consistent Code**: AI ensures suggestions follow best practices and coding standards
+- **Reduced Back-and-Forth**: Clear, actionable suggestions minimize review iterations
+- **Learning Opportunity**: Developers learn from AI-suggested improvements
 
 #### POST `/review/legacy`
 Legacy endpoint for backward compatibility (returns simple text response).
@@ -444,6 +555,8 @@ print(f"Repository score: {review['summary']['overall_score']}")
 
 ## License
 
-[Your License Here]#   a i - a g e n t  
- #   a i - a g e n t  
+[Your License Here]#   a i - a g e n t 
+ 
+ #   a i - a g e n t 
+ 
  

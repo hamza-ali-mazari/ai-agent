@@ -38,6 +38,7 @@ class ReviewComment(BaseModel):
     description: str
     location: Optional[CodeLocation] = None
     suggestion: Optional[str] = None
+    inline_suggestion: Optional[str] = None  # Exact replacement code for PR suggestions
     code_example: Optional[str] = None
     references: Optional[List[str]] = None
 

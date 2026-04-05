@@ -84,20 +84,115 @@ class AICodeReviewEngine:
     def _detect_language(self, file_path: str) -> str:
         """Detect programming language from file extension."""
         ext_map = {
+            # Python
             '.py': 'python',
+            '.pyw': 'python',
+            '.pyx': 'python',
+            '.pxd': 'python',
+
+            # JavaScript/TypeScript
             '.js': 'javascript',
+            '.mjs': 'javascript',
+            '.cjs': 'javascript',
+            '.jsx': 'javascript',
             '.ts': 'typescript',
+            '.tsx': 'typescript',
+            '.d.ts': 'typescript',
+
+            # Java
             '.java': 'java',
-            '.cpp': 'cpp',
+            '.jsp': 'java',
+            '.jar': 'java',
+
+            # C/C++
             '.c': 'c',
-            '.go': 'go',
-            '.rs': 'rust',
-            '.php': 'php',
-            '.rb': 'ruby',
+            '.cpp': 'cpp',
+            '.cc': 'cpp',
+            '.cxx': 'cpp',
+            '.h': 'c',
+            '.hpp': 'cpp',
+            '.hxx': 'cpp',
+
+            # C#
             '.cs': 'csharp',
+            '.csx': 'csharp',
+
+            # Go
+            '.go': 'go',
+
+            # Rust
+            '.rs': 'rust',
+
+            # PHP
+            '.php': 'php',
+            '.phtml': 'php',
+            '.php3': 'php',
+            '.php4': 'php',
+            '.php5': 'php',
+            '.php7': 'php',
+
+            # Ruby
+            '.rb': 'ruby',
+            '.rbw': 'ruby',
+
+            # Swift
             '.swift': 'swift',
+
+            # Kotlin
             '.kt': 'kotlin',
-            '.scala': 'scala'
+            '.kts': 'kotlin',
+
+            # Scala
+            '.scala': 'scala',
+            '.sc': 'scala',
+
+            # R
+            '.r': 'r',
+            '.rmd': 'r',
+
+            # Perl
+            '.pl': 'perl',
+            '.pm': 'perl',
+            '.t': 'perl',
+
+            # Shell scripts
+            '.sh': 'shell',
+            '.bash': 'shell',
+            '.zsh': 'shell',
+            '.fish': 'shell',
+            '.ps1': 'powershell',
+
+            # Web technologies
+            '.html': 'html',
+            '.htm': 'html',
+            '.css': 'css',
+            '.scss': 'scss',
+            '.sass': 'sass',
+            '.less': 'less',
+
+            # Configuration files
+            '.json': 'json',
+            '.xml': 'xml',
+            '.yaml': 'yaml',
+            '.yml': 'yaml',
+            '.toml': 'toml',
+            '.ini': 'ini',
+            '.cfg': 'ini',
+
+            # Database
+            '.sql': 'sql',
+
+            # Other languages
+            '.lua': 'lua',
+            '.dart': 'dart',
+            '.hs': 'haskell',
+            '.ml': 'ocaml',
+            '.fs': 'fsharp',
+            '.vb': 'vbnet',
+            '.clj': 'clojure',
+            '.elm': 'elm',
+            '.ex': 'elixir',
+            '.exs': 'elixir'
         }
 
         for ext, lang in ext_map.items():
@@ -118,22 +213,31 @@ FILE: {file_info['path']}
 LANGUAGE: {language}
 
 REVIEW REQUIREMENTS:
-Analyze the following code changes and provide detailed, actionable feedback. Focus on:
-{', '.join(categories)}
+Analyze the following code changes and provide detailed, actionable feedback. You are reviewing code in {language.upper()}, so consider language-specific best practices, idioms, and common pitfalls.
+
+Focus on these categories: {', '.join(categories)}
 
 For each issue found, provide:
 1. CATEGORY: One of {', '.join(categories)}
 2. SEVERITY: critical/high/medium/low/info
 3. TITLE: Brief, descriptive title
-4. DESCRIPTION: Detailed explanation of the issue
-5. LOCATION: Line numbers if applicable
-6. SUGGESTION: How to fix it
-7. CODE_EXAMPLE: Concrete code example (if applicable)
+4. DESCRIPTION: Detailed explanation of the issue, considering {language} best practices
+5. LOCATION: Line numbers if applicable (be precise about which lines the issue affects)
+6. SUGGESTION: Clear, actionable suggestion for how to fix it, appropriate for {language}
+7. INLINE_SUGGESTION: The exact replacement code that should replace the problematic lines. This should be the corrected version of the code that can be applied directly as a suggestion in the PR. Include proper indentation and formatting for {language}.
+8. CODE_EXAMPLE: Additional code example showing the fix in context (use only if the inline suggestion needs more context)
 
 CODE CHANGES:
 ```diff
 {changes}
 ```
+
+LANGUAGE-SPECIFIC GUIDANCE:
+- For compiled languages (Java, C++, C#, Go, Rust): Focus on performance, memory management, type safety
+- For interpreted languages (Python, JavaScript, PHP, Ruby): Focus on runtime errors, code clarity, maintainability
+- For web technologies (HTML, CSS, JavaScript): Focus on accessibility, browser compatibility, security
+- For scripts (Shell, PowerShell): Focus on error handling, portability, security
+- For configuration files (JSON, YAML, XML): Focus on syntax correctness, structure, maintainability
 
 RESPONSE FORMAT:
 Return a JSON object with the following structure:
@@ -147,7 +251,8 @@ Return a JSON object with the following structure:
       "description": "Detailed description",
       "location": {{"line_start": 10, "line_end": 15}},
       "suggestion": "How to fix",
-      "code_example": "```python\\nprint('example')\\n```"
+      "inline_suggestion": "    corrected_code_line_1\\n    corrected_code_line_2",
+      "code_example": "```python\\n# Full example if needed\\nprint('example')\\n```"
     }}
   ],
   "metrics": {{
@@ -156,7 +261,9 @@ Return a JSON object with the following structure:
   }}
 }}
 
-Be thorough but concise. Focus on real issues and improvements."""
+IMPORTANT: For INLINE_SUGGESTION, provide the exact replacement code that should replace the problematic lines. This should be ready to apply as a direct code suggestion in the PR interface. Include proper indentation matching the original code and follow {language} conventions.
+
+Be thorough but concise. Focus on real issues and improvements specific to {language}."""
 
         return prompt
 
@@ -216,6 +323,7 @@ Be thorough but concise. Focus on real issues and improvements."""
                 description=comment_data.get('description', ''),
                 location=location,
                 suggestion=comment_data.get('suggestion'),
+                inline_suggestion=comment_data.get('inline_suggestion'),
                 code_example=comment_data.get('code_example'),
                 references=comment_data.get('references', [])
             )

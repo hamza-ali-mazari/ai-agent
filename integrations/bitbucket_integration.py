@@ -232,11 +232,15 @@ class BitbucketIntegration:
 
         for file_review in review_response.get("files", []):
             for comment in file_review.get("comments", []):
-                if comment.get("severity") in ["critical", "high", "medium"]:
+                # Post comments for issues that have inline suggestions or are high severity
+                has_inline_suggestion = bool(comment.get("inline_suggestion"))
+                is_significant = comment.get("severity") in ["critical", "high", "medium"]
+
+                if has_inline_suggestion or is_significant:
                     # Create review comment
                     comment_data = {
                         "content": {
-                            "raw": self.format_comment_body(comment)
+                            "raw": self.format_comment_body(comment, file_review["file_path"])
                         },
                         "inline": {
                             "path": file_review["file_path"],
@@ -289,8 +293,26 @@ class BitbucketIntegration:
         if response.status_code not in [201, 200]:
             logger.error(f"Failed to post summary: {response.status_code}")
 
-    def format_comment_body(self, comment: Dict[str, Any]) -> str:
-        """Format a review comment for Bitbucket."""
+    def _detect_language(self, file_path: str) -> str:
+        """Detect programming language from file extension."""
+        if not file_path:
+            return 'text'
+
+        ext_map = {
+            '.py': 'python', '.js': 'javascript', '.ts': 'typescript', '.java': 'java',
+            '.cpp': 'cpp', '.c': 'c', '.go': 'go', '.rs': 'rust', '.php': 'php',
+            '.rb': 'ruby', '.cs': 'csharp', '.swift': 'swift', '.kt': 'kotlin',
+            '.scala': 'scala', '.sh': 'bash', '.ps1': 'powershell', '.html': 'html',
+            '.css': 'css', '.sql': 'sql', '.json': 'json', '.xml': 'xml', '.yaml': 'yaml'
+        }
+
+        for ext, lang in ext_map.items():
+            if file_path.endswith(ext):
+                return lang
+        return 'text'
+
+    def format_comment_body(self, comment: Dict[str, Any], file_path: str = None) -> str:
+        """Format a review comment for Bitbucket with inline suggestions."""
         severity_emojis = {
             "critical": "🔴",
             "high": "🟠",
@@ -302,9 +324,12 @@ class BitbucketIntegration:
         emoji = severity_emojis.get(comment.get("severity", "info"), "ℹ️")
         category = comment.get("category", "general").replace("_", " ").title()
 
+        # Detect language for code block syntax highlighting
+        language = self._detect_language(file_path) if file_path else "python"
+
         body = f"""**{emoji} {comment.get('title', 'Review Comment')}**
 
-**Category:** {category}  
+**Category:** {category}
 **Severity:** {comment.get('severity', 'info').title()}
 
 {comment.get('description', '')}
@@ -314,8 +339,14 @@ class BitbucketIntegration:
         if comment.get('suggestion'):
             body += f"**Suggestion:** {comment['suggestion']}\n\n"
 
-        if comment.get('code_example'):
-            body += f"**Example:**\n```python\n{comment['code_example']}\n```\n"
+        # Add inline suggestion if available (Bitbucket format)
+        if comment.get('inline_suggestion'):
+            body += f"**Suggested change:**\n```diff\n{comment['inline_suggestion']}\n```\n\n"
+
+        if comment.get('code_example') and not comment.get('inline_suggestion'):
+            # Replace the generic python code block with the detected language
+            code_example = comment['code_example'].replace('```python', f'```{language}')
+            body += f"**Example:**\n{code_example}\n"
 
         return body
 
