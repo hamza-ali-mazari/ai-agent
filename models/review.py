@@ -63,6 +63,7 @@ class ReviewSummary(BaseModel):
     low_issues: int
     info_suggestions: int
     categories_breakdown: Dict[str, int]
+    analysis_errors: int = 0
 
 
 class CodeReviewRequest(BaseModel):
