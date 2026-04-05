@@ -217,15 +217,27 @@ Analyze the following code changes and provide detailed, actionable feedback. Yo
 
 Focus on these categories: {', '.join(categories)}
 
+SECURITY SCANNING REQUIREMENTS:
+Perform a comprehensive security analysis for:
+- SQL Injection vulnerabilities (unsafe string concatenation in queries)
+- XSS (Cross-Site Scripting) attacks (unsafe HTML output, user input in DOM)
+- Hardcoded secrets (API keys, passwords, tokens in source code)
+- Unsafe API usage (deprecated functions, insecure defaults)
+- Authentication/authorization issues (missing auth checks, weak auth)
+- Data validation issues (missing input sanitization)
+- Cryptographic weaknesses (weak algorithms, improper key management)
+
 For each issue found, provide:
 1. CATEGORY: One of {', '.join(categories)}
 2. SEVERITY: critical/high/medium/low/info
-3. TITLE: Brief, descriptive title
-4. DESCRIPTION: Detailed explanation of the issue, considering {language} best practices
+3. TITLE: Brief, descriptive title (e.g., "Missing Import Statements", "SQL Injection Risk")
+4. DESCRIPTION: Detailed explanation of the issue, considering {language} best practices and security implications
 5. LOCATION: Line numbers if applicable (be precise about which lines the issue affects)
 6. SUGGESTION: Clear, actionable suggestion for how to fix it, appropriate for {language}
 7. INLINE_SUGGESTION: The exact replacement code that should replace the problematic lines. This should be the corrected version of the code that can be applied directly as a suggestion in the PR. Include proper indentation and formatting for {language}.
 8. CODE_EXAMPLE: Additional code example showing the fix in context (use only if the inline suggestion needs more context)
+9. MINIMAL_TEST: A minimal unit test or security test that validates the fix
+10. REFERENCES: Security standards, OWASP guidelines, or best practices that apply
 
 CODE CHANGES:
 ```diff
@@ -233,38 +245,60 @@ CODE CHANGES:
 ```
 
 LANGUAGE-SPECIFIC GUIDANCE:
-- For compiled languages (Java, C++, C#, Go, Rust): Focus on performance, memory management, type safety
-- For interpreted languages (Python, JavaScript, PHP, Ruby): Focus on runtime errors, code clarity, maintainability
-- For web technologies (HTML, CSS, JavaScript): Focus on accessibility, browser compatibility, security
-- For scripts (Shell, PowerShell): Focus on error handling, portability, security
-- For configuration files (JSON, YAML, XML): Focus on syntax correctness, structure, maintainability
+- For compiled languages (Java, C++, C#, Go, Rust): Focus on performance, memory management, type safety, secure coding practices
+- For interpreted languages (Python, JavaScript, PHP, Ruby): Focus on runtime errors, code clarity, maintainability, input validation, secure API usage
+- For web technologies (HTML, CSS, JavaScript): Focus on accessibility, browser compatibility, security (XSS, CSRF, secure headers)
+- For scripts (Shell, PowerShell): Focus on error handling, portability, security, input sanitization
+- For configuration files (JSON, YAML, XML): Focus on syntax correctness, structure, maintainability, secret exposure
+
+SECURITY ANALYSIS FRAMEWORK:
+1. Input Validation: Check for proper sanitization of user inputs
+2. Output Encoding: Verify safe output handling (HTML, SQL, JSON)
+3. Authentication: Look for missing auth checks, weak auth mechanisms
+4. Authorization: Check for proper access controls
+5. Session Management: Review session handling security
+6. Cryptography: Identify weak algorithms, improper key usage
+7. Error Handling: Ensure errors don't leak sensitive information
+8. Logging: Check for secure logging practices
+
+METRICS CALCULATION:
+- security_score: 0-100 based on vulnerability count and severity (100 = no issues, deduct 15-20 points per vulnerability, more for critical/high severity)
+- vulnerability_count: Total number of security issues found
+- quality_score: 0-100 based on code quality issues (100 = excellent, deduct points for style, performance, maintainability issues)
+- maintainability_score: 0-100 based on code structure and readability (100 = highly maintainable, deduct for complex functions, poor naming, lack of documentation)
+- complexity_score: 0-10 based on cyclomatic complexity (0 = simple, 10 = very complex)
 
 RESPONSE FORMAT:
 Return a JSON object with the following structure:
 {{
-  "summary": "Brief overall assessment of the file changes",
+  "summary": "Brief overall assessment of the file changes including security posture",
   "comments": [
     {{
-      "category": "bugs",
-      "severity": "high",
-      "title": "Brief title",
-      "description": "Detailed description",
-      "location": {{"line_start": 10, "line_end": 15}},
-      "suggestion": "How to fix",
-      "inline_suggestion": "    corrected_code_line_1\\n    corrected_code_line_2",
-      "code_example": "```python\n# Full example if needed\nprint('example')\n```",
-      "minimal_test": "```python\nimport unittest\n# minimal unit test here\n```"
+      "category": "security",
+      "severity": "critical",
+      "title": "SQL Injection Vulnerability",
+      "description": "User input is directly concatenated into SQL query without parameterization",
+      "location": {{"line_start": 15, "line_end": 18}},
+      "suggestion": "Use parameterized queries or prepared statements to prevent SQL injection",
+      "inline_suggestion": "    cursor.execute(\"SELECT * FROM users WHERE id = %s\", (user_id,))",
+      "code_example": "```python\\nimport sqlite3\\n# Secure parameterized query\\ncursor.execute(\"SELECT * FROM users WHERE id = ?\", (user_id,))\\n```",
+      "minimal_test": "```python\\nimport unittest\\ndef test_sql_injection_prevention(self):\\n    # Test that malicious input doesn't execute\\n    result = query_user(\"1 OR 1=1\")\\n    self.assertEqual(len(result), 0)\\n```",
+      "references": ["OWASP SQL Injection Prevention Cheat Sheet", "CWE-89"]
     }}
   ],
   "metrics": {{
     "complexity_score": 5,
-    "maintainability_index": 75
+    "maintainability_index": 75,
+    "security_score": 85,
+    "vulnerability_count": 2,
+    "quality_score": 90,
+    "maintainability_score": 88
   }}
 }}
 
 IMPORTANT: For INLINE_SUGGESTION, provide the exact replacement code that should replace the problematic lines. This should be ready to apply as a direct code suggestion in the PR interface. Include proper indentation matching the original code and follow {language} conventions.
 
-Be thorough but concise. Focus on real issues and improvements specific to {language}."""
+Be thorough but concise. Focus on real issues and improvements specific to {language}. Prioritize security vulnerabilities as they pose the highest risk."""
 
         return prompt
 
@@ -277,14 +311,14 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert code reviewer. Always respond with valid JSON."
+                        "content": "You are an expert code reviewer and security analyst. Always respond with valid JSON. Focus on security vulnerabilities and code quality issues."
                     },
                     {
                         "role": "user",
                         "content": prompt
                     }
                 ],
-                temperature=0.1,  # Lower temperature for more consistent reviews
+                temperature=0.0,  # Lower temperature for more consistent, deterministic reviews
                 max_tokens=4000,
                 response_format={"type": "json_object"}
             )
@@ -297,10 +331,32 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse AI response as JSON: {e}")
-            return {"summary": "Error parsing AI response", "comments": [], "metrics": {}}
+            return {
+                "summary": "Error parsing AI response - unable to complete analysis",
+                "comments": [],
+                "metrics": {
+                    "security_score": 0,  # Unable to determine
+                    "vulnerability_count": 0,
+                    "quality_score": 0,
+                    "maintainability_score": 0,
+                    "complexity_score": 0,
+                    "analysis_error": "JSON parsing failed"
+                }
+            }
         except Exception as e:
             logger.error(f"Error calling AI model: {str(e)}")
-            return {"summary": "Error analyzing code", "comments": [], "metrics": {}}
+            return {
+                "summary": "Error analyzing code - AI service unavailable",
+                "comments": [],
+                "metrics": {
+                    "security_score": 0,  # Unable to determine
+                    "vulnerability_count": 0,
+                    "quality_score": 0,
+                    "maintainability_score": 0,
+                    "complexity_score": 0,
+                    "analysis_error": "AI service unavailable"
+                }
+            }
 
     def _create_review_comment(self, comment_data: Dict[str, Any], file_path: str) -> ReviewComment:
         """Create a ReviewComment from AI response data."""
@@ -327,7 +383,9 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
                 inline_suggestion=comment_data.get('inline_suggestion'),
                 code_example=comment_data.get('code_example'),
                 minimal_test=comment_data.get('minimal_test'),
-                references=comment_data.get('references', [])
+                references=comment_data.get('references', []),
+                rule_id=comment_data.get('rule_id'),
+                impact=comment_data.get('impact')
             )
         except Exception as e:
             logger.error(f"Error creating review comment: {e}")
@@ -380,12 +438,23 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
             # Limit comments per file
             comments = comments[:config.max_comments_per_file]
 
+            # Update metrics with security information
+            metrics = ai_response.get('metrics', {})
+            if 'security_score' not in metrics:
+                # Calculate security score based on comments
+                security_issues = [c for c in comments if c.category.value == 'security']
+                vuln_count = len(security_issues)
+                # Security score: 100 - (vulnerabilities * 20) - (high/crit * 10)
+                security_score = max(0, 100 - (vuln_count * 15) - sum(20 if c.severity.value in ['critical', 'high'] else 0 for c in security_issues))
+                metrics['security_score'] = security_score
+                metrics['vulnerability_count'] = vuln_count
+
             file_review = FileReview(
                 file_path=file_info['path'],
                 language=file_info.get('language'),
                 summary=ai_response.get('summary', 'No summary provided'),
                 comments=comments,
-                metrics=ai_response.get('metrics', {})
+                metrics=metrics
             )
 
             file_reviews.append(file_review)

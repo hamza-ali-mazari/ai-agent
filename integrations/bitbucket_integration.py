@@ -261,9 +261,39 @@ class BitbucketIntegration:
         overall_feedback = review_response.get("overall_feedback", "")
         recommendations = review_response.get("recommendations", [])
 
+        # Calculate security metrics across all files
+        total_security_score = 0
+        total_vulnerabilities = 0
+        file_count = 0
+        analysis_errors = 0
+
+        for file_review in review_response.get("files", []):
+            metrics = file_review.get("metrics", {})
+            if "security_score" in metrics:
+                # Only count files that were actually analyzed
+                if metrics.get("analysis_error"):
+                    analysis_errors += 1
+                else:
+                    total_security_score += metrics["security_score"]
+                    total_vulnerabilities += metrics.get("vulnerability_count", 0)
+                    file_count += 1
+
+        avg_security_score = total_security_score / file_count if file_count > 0 else 0
+
+        # Security status indicator
+        if analysis_errors > 0:
+            security_status = "❌ Analysis Failed"
+        elif avg_security_score >= 90:
+            security_status = "🛡️ Secure"
+        elif avg_security_score >= 70:
+            security_status = "⚠️ Needs Attention"
+        else:
+            security_status = "🚨 Critical Issues"
+
         body = f"""## 🤖 AI Code Review Summary
 
 **Overall Score:** {summary.get('overall_score', 0)}/100
+**Security Score:** {avg_security_score:.1f}/100 ({security_status})
 
 ### Issues Found:
 - 🔴 Critical: {summary.get('critical_issues', 0)}
@@ -271,6 +301,12 @@ class BitbucketIntegration:
 - 🟡 Medium: {summary.get('medium_issues', 0)}
 - 🟢 Low: {summary.get('low_issues', 0)}
 - ℹ️ Info: {summary.get('info_suggestions', 0)}
+
+### Security Analysis:
+- **Total Vulnerabilities:** {total_vulnerabilities}
+- **Files Analyzed:** {file_count}
+- **Analysis Errors:** {analysis_errors}
+- **Average Security Score:** {avg_security_score:.1f}/100
 
 ### Feedback:
 {overall_feedback}
@@ -312,7 +348,7 @@ class BitbucketIntegration:
         return 'text'
 
     def format_comment_body(self, comment: Dict[str, Any], file_path: str = None) -> str:
-        """Format a review comment for Bitbucket with inline suggestions."""
+        """Format a review comment for Bitbucket with professional security-focused layout."""
         severity_emojis = {
             "critical": "🔴",
             "high": "🟠",
@@ -323,36 +359,76 @@ class BitbucketIntegration:
 
         emoji = severity_emojis.get(comment.get("severity", "info"), "ℹ️")
         category = comment.get("category", "general").replace("_", " ").title()
+        title = comment.get('title', 'Review Comment')
 
         # Detect language for code block syntax highlighting
         language = self._detect_language(file_path) if file_path else "python"
 
-        body = f"""**{emoji} {comment.get('title', 'Review Comment')}**
+        # Build professional comment body
+        body_parts = []
 
-**Category:** {category}
-**Severity:** {comment.get('severity', 'info').title()}
+        # Header with severity and title
+        body_parts.append(f"### {emoji} {title}")
 
-{comment.get('description', '')}
+        # Severity and category
+        body_parts.append(f"**Severity:** {comment.get('severity', 'info').upper()}")
+        body_parts.append(f"**Category:** {category}")
 
-"""
+        # Location if available
+        if comment.get('location') and comment['location'].get('line_start'):
+            loc = comment['location']
+            line_info = f"{file_path}:{loc['line_start']}"
+            if loc.get('line_end') and loc['line_end'] != loc['line_start']:
+                line_info += f"-{loc['line_end']}"
+            body_parts.append(f"**File + line:** {line_info}")
 
+        # Rule ID if available (for security issues)
+        if comment.get('rule_id'):
+            body_parts.append(f"**Rule ID:** {comment['rule_id']}")
+
+        # Description
+        if comment.get('description'):
+            body_parts.append("")
+            body_parts.append(comment['description'])
+
+        # Impact (for security issues)
+        if comment.get('impact'):
+            body_parts.append("")
+            body_parts.append(f"**Impact:** {comment['impact']}")
+
+        # Suggestion
         if comment.get('suggestion'):
-            body += f"**Suggestion:** {comment['suggestion']}\n\n"
+            body_parts.append("")
+            body_parts.append(f"**Suggestion:** {comment['suggestion']}")
 
-        # Add inline suggestion if available (Bitbucket format)
+        # Inline suggestion (diff format)
         if comment.get('inline_suggestion'):
-            body += f"**Suggested change:**\n```diff\n{comment['inline_suggestion']}\n```\n\n"
+            body_parts.append("")
+            body_parts.append("**Suggested fix:**")
+            body_parts.append(f"```diff\n{comment['inline_suggestion']}\n```")
 
+        # Code example
         if comment.get('code_example'):
-            # Replace the generic python code block with the detected language
+            body_parts.append("")
+            body_parts.append("**Example:**")
             code_example = comment['code_example'].replace('```python', f'```{language}')
-            body += f"**Example:**\n{code_example}\n\n"
+            body_parts.append(code_example)
 
+        # Minimal test
         if comment.get('minimal_test'):
+            body_parts.append("")
+            body_parts.append("**Minimal test:**")
             minimal_test = comment['minimal_test'].replace('```python', f'```{language}')
-            body += f"**Minimal test:**\n{minimal_test}\n"
+            body_parts.append(minimal_test)
 
-        return body
+        # References
+        if comment.get('references'):
+            body_parts.append("")
+            body_parts.append("**References:**")
+            for ref in comment['references']:
+                body_parts.append(f"- {ref}")
+
+        return "\n".join(body_parts)
 
 
 # FastAPI integration example

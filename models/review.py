@@ -42,6 +42,8 @@ class ReviewComment(BaseModel):
     code_example: Optional[str] = None
     minimal_test: Optional[str] = None
     references: Optional[List[str]] = None
+    rule_id: Optional[str] = None  # Security rule identifier (e.g., "OWASP-A01", "CWE-89")
+    impact: Optional[str] = None  # Security/business impact description
 
 
 class FileReview(BaseModel):
@@ -111,8 +113,8 @@ class CodeReviewResponse(BaseModel):
 
 class ReviewConfig(BaseModel):
     enabled_categories: List[ReviewCategory] = [
+        ReviewCategory.SECURITY,  # Security scanning enabled by default
         ReviewCategory.BUGS,
-        ReviewCategory.SECURITY,
         ReviewCategory.PERFORMANCE,
         ReviewCategory.MAINTAINABILITY,
         ReviewCategory.STYLE,
