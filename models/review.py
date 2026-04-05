@@ -40,6 +40,7 @@ class ReviewComment(BaseModel):
     suggestion: Optional[str] = None
     inline_suggestion: Optional[str] = None  # Exact replacement code for PR suggestions
     code_example: Optional[str] = None
+    minimal_test: Optional[str] = None
     references: Optional[List[str]] = None
 
 

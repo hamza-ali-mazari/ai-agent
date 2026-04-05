@@ -252,7 +252,8 @@ Return a JSON object with the following structure:
       "location": {{"line_start": 10, "line_end": 15}},
       "suggestion": "How to fix",
       "inline_suggestion": "    corrected_code_line_1\\n    corrected_code_line_2",
-      "code_example": "```python\\n# Full example if needed\\nprint('example')\\n```"
+      "code_example": "```python\n# Full example if needed\nprint('example')\n```",
+      "minimal_test": "```python\nimport unittest\n# minimal unit test here\n```"
     }}
   ],
   "metrics": {{
@@ -325,6 +326,7 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
                 suggestion=comment_data.get('suggestion'),
                 inline_suggestion=comment_data.get('inline_suggestion'),
                 code_example=comment_data.get('code_example'),
+                minimal_test=comment_data.get('minimal_test'),
                 references=comment_data.get('references', [])
             )
         except Exception as e:

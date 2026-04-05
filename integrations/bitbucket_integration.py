@@ -343,10 +343,14 @@ class BitbucketIntegration:
         if comment.get('inline_suggestion'):
             body += f"**Suggested change:**\n```diff\n{comment['inline_suggestion']}\n```\n\n"
 
-        if comment.get('code_example') and not comment.get('inline_suggestion'):
+        if comment.get('code_example'):
             # Replace the generic python code block with the detected language
             code_example = comment['code_example'].replace('```python', f'```{language}')
-            body += f"**Example:**\n{code_example}\n"
+            body += f"**Example:**\n{code_example}\n\n"
+
+        if comment.get('minimal_test'):
+            minimal_test = comment['minimal_test'].replace('```python', f'```{language}')
+            body += f"**Minimal test:**\n{minimal_test}\n"
 
         return body
 
