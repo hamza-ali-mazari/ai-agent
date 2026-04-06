@@ -297,6 +297,16 @@ Get default review configuration.
 
 ## Configuration
 
+### Azure OpenAI Setup
+
+The AI Code Review Engine uses **Azure OpenAI GPT-4o** for intelligent code analysis. 
+
+**Current Configuration:**
+- **Model**: `gpt-4o-india-atul-b2b` (GPT-4 with extended capabilities)
+- **API Version**: `2025-01-01-preview` (Latest stable preview)
+- **Endpoint**: `https://agentictechops.openai.azure.com`
+- **Embedding Model**: `text-embedding-3-large` (For advanced semantic analysis)
+
 ### Environment Variables
 
 - `AZURE_OPENAI_API_KEY`: Your Azure OpenAI API key

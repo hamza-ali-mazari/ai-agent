@@ -36,6 +36,11 @@ for var in required_env_vars:
     if not os.getenv(var):
         raise ValueError(f"Environment variable {var} is not set")
 
+# Log Azure OpenAI configuration for debugging
+logger.info(f"Azure OpenAI Endpoint: {os.getenv('AZURE_OPENAI_ENDPOINT')}")
+logger.info(f"Azure OpenAI API Version: {os.getenv('AZURE_OPENAI_API_VERSION')}")
+logger.info(f"Azure OpenAI Deployment: {os.getenv('AZURE_OPENAI_DEPLOYMENT')}")
+
 class AICodeReviewEngine:
     """Professional AI-powered code review engine."""
 
@@ -311,16 +316,17 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert code reviewer and security analyst. Always respond with valid JSON. Focus on security vulnerabilities and code quality issues."
+                        "content": "You are an expert code reviewer and security analyst using GPT-4. Always respond with valid JSON. Focus on security vulnerabilities and code quality issues. Be precise and actionable in your suggestions."
                     },
                     {
                         "role": "user",
                         "content": prompt
                     }
                 ],
-                temperature=0.0,  # Lower temperature for more consistent, deterministic reviews
+                temperature=0.0,  # Lower temperature for consistent, deterministic reviews (optimal for gpt-4o)
                 max_tokens=4000,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                top_p=0.9  # Ensure diverse but coherent responses
             )
 
             result = response.choices[0].message.content
@@ -475,10 +481,19 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
             severity_counts[comment.severity.value] += 1
             category_counts[comment.category.value] += 1
 
+        analysis_errors = sum(
+            1 for file_review in file_reviews
+            if file_review.metrics and file_review.metrics.get('analysis_error')
+        )
+
         # Calculate overall score (simple algorithm)
         weights = {'critical': 10, 'high': 5, 'medium': 2, 'low': 1, 'info': 0}
         penalty_score = sum(severity_counts[sev] * weight for sev, weight in weights.items())
         overall_score = max(0, 100 - penalty_score)
+
+        # If the AI review failed, lower the overall score to reflect incomplete analysis
+        if analysis_errors > 0:
+            overall_score = 0
 
         summary = ReviewSummary(
             overall_score=overall_score,
@@ -488,7 +503,8 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
             medium_issues=severity_counts['medium'],
             low_issues=severity_counts['low'],
             info_suggestions=severity_counts['info'],
-            categories_breakdown=category_counts
+            categories_breakdown=category_counts,
+            analysis_errors=analysis_errors
         )
 
         # Generate overall feedback
@@ -520,6 +536,12 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
     def _generate_overall_feedback(self, summary: ReviewSummary, files: List[FileReview]) -> str:
         """Generate overall feedback based on review results."""
         score = summary.overall_score
+
+        if summary.analysis_errors > 0:
+            return (
+                "AI analysis failed for one or more files. "
+                "Please verify your OpenAI credentials and retry the review."
+            )
 
         if score >= 90:
             feedback = "Excellent work! The code changes are of high quality with minimal issues."
