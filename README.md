@@ -450,8 +450,11 @@ Complete Bitbucket integration in `integrations/bitbucket_integration.py`:
 ```bash
 # Set environment variables
 export BITBUCKET_USERNAME=your_username
-export BITBUCKET_TOKEN=your_api_token
+export BITBUCKET_TOKEN=your_app_password_or_access_token
 export BITBUCKET_WEBHOOK_SECRET=your_webhook_secret
+
+# Alternatively, if using OAuth tokens:
+# export BITBUCKET_OAUTH_TOKEN=your_oauth_token
 
 # Run the integration server
 python integrations/bitbucket_integration.py
@@ -530,8 +533,10 @@ print(f"Repository score: {review['summary']['overall_score']}")
 - `GITHUB_DEEP_ANALYSIS`: Enable deep file content analysis (default: false)
 
 #### Bitbucket:
-- `BITBUCKET_USERNAME`: Bitbucket username
-- `BITBUCKET_TOKEN`: API token for Cloud (app passwords deprecated) or personal access token for Server
+- `BITBUCKET_USERNAME`: Bitbucket username for Cloud Basic Auth
+- `BITBUCKET_TOKEN`: App password or access token for Cloud; also accepted as bearer auth when username is not set
+- `BITBUCKET_APP_PASSWORD`: Optional Bitbucket Cloud app password when using `BITBUCKET_USERNAME`
+- `BITBUCKET_OAUTH_TOKEN`: Optional OAuth token for Bitbucket Cloud
 - `BITBUCKET_SERVER_URL`: Server URL for Data Center
 - `BITBUCKET_WEBHOOK_SECRET`: Webhook secret
 

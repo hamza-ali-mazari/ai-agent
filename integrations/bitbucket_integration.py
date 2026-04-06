@@ -32,12 +32,35 @@ class BitbucketIntegration:
     def __init__(self, base_url: str = "http://localhost:8000", is_server: bool = False):
         self.base_url = base_url
         self.bitbucket_username = os.getenv("BITBUCKET_USERNAME")
-        self.bitbucket_token = os.getenv("BITBUCKET_TOKEN")  # App password for Basic Auth
+        self.bitbucket_token = os.getenv("BITBUCKET_TOKEN")  # App password or access token
+        self.bitbucket_app_password = os.getenv("BITBUCKET_APP_PASSWORD")
+        self.bitbucket_oauth_token = os.getenv("BITBUCKET_OAUTH_TOKEN")
         self.webhook_secret = os.getenv("BITBUCKET_WEBHOOK_SECRET")
         self.is_server = is_server  # True for Bitbucket Server/Data Center
 
         # API base URLs
         self.api_base = "https://api.bitbucket.org/2.0" if not is_server else os.getenv("BITBUCKET_SERVER_URL", "")
+
+    def get_auth_headers(self) -> Dict[str, str]:
+        """Return authentication headers for Bitbucket API requests."""
+        headers: Dict[str, str] = {}
+
+        if self.bitbucket_oauth_token:
+            headers["Authorization"] = f"Bearer {self.bitbucket_oauth_token}"
+        elif self.bitbucket_token and not self.bitbucket_username:
+            headers["Authorization"] = f"Bearer {self.bitbucket_token}"
+
+        return headers
+
+    def get_auth(self) -> Optional[tuple]:
+        """Return auth tuple for Bitbucket Cloud Basic Auth if username/token are configured."""
+        if self.bitbucket_oauth_token:
+            return None
+
+        if self.bitbucket_username and (self.bitbucket_token or self.bitbucket_app_password):
+            return (self.bitbucket_username, self.bitbucket_token or self.bitbucket_app_password)
+
+        return None
 
     def verify_webhook_signature(self, payload: bytes, signature: str) -> bool:
         """Verify Bitbucket webhook signature."""
@@ -57,16 +80,6 @@ class BitbucketIntegration:
             return signature == expected_signature
 
         return hmac.compare_digest(f"sha256={expected_signature}", signature)
-
-    def get_auth_headers(self) -> Dict[str, str]:
-        """Get authentication headers for Bitbucket API using Bearer token."""
-        # For Bitbucket Cloud: use Bearer token authentication
-        if self.bitbucket_token:
-            return {"Authorization": f"Bearer {self.bitbucket_token}"}
-
-        raise ValueError(
-            "Bitbucket authentication failed. Set BITBUCKET_TOKEN for Bitbucket Cloud."
-        )
 
     async def handle_pull_request_event(self, payload: BitbucketWebhookPayload, event_key: str = None) -> None:
         """Handle Bitbucket pull request events."""
@@ -149,8 +162,9 @@ class BitbucketIntegration:
         """Get diff content from Bitbucket PR."""
         url = f"{self.api_base}/repositories/{workspace}/{repo_slug}/pullrequests/{pr_id}/diff"
         headers = self.get_auth_headers()
+        auth = self.get_auth()
 
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, auth=auth)
         if response.status_code == 200:
             return response.text
         else:
@@ -169,9 +183,10 @@ class BitbucketIntegration:
         """Get all files changed in the PR."""
         url = f"{self.api_base}/repositories/{workspace}/{repo_slug}/pullrequests/{pr_id}/diffstat"
         headers = self.get_auth_headers()
+        auth = self.get_auth()
 
         try:
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, auth=auth)
             if response.status_code == 200:
                 data = response.json()
                 return [item["new"]["path"] for item in data.get("values", []) if item.get("new")]
@@ -185,21 +200,6 @@ class BitbucketIntegration:
                         "Authentication failure when fetching PR files. "
                         "Check Bitbucket credentials and permissions."
                     )
-                return []
-        except Exception as e:
-            logger.error(f"Error getting PR files: {str(e)}")
-            return []
-        """Get all files changed in the PR."""
-        url = f"{self.api_base}/repositories/{workspace}/{repo_slug}/pullrequests/{pr_id}/diffstat"
-        headers = self.get_auth_headers()
-
-        try:
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                data = response.json()
-                return [item["new"]["path"] for item in data.get("values", []) if item.get("new")]
-            else:
-                logger.warning(f"Failed to get PR files: {response.status_code}")
                 return []
         except Exception as e:
             logger.error(f"Error getting PR files: {str(e)}")
@@ -229,6 +229,7 @@ class BitbucketIntegration:
         """Post individual review comments to Bitbucket PR."""
         headers = self.get_auth_headers()
         headers["Content-Type"] = "application/json"
+        auth = self.get_auth()
 
         for file_review in review_response.get("files", []):
             for comment in file_review.get("comments", []):
@@ -250,7 +251,7 @@ class BitbucketIntegration:
                     }
 
                     url = f"{self.api_base}/repositories/{workspace}/{repo_slug}/pullrequests/{pr_id}/comments"
-                    response = requests.post(url, json=comment_data, headers=headers)
+                    response = requests.post(url, json=comment_data, headers=headers, auth=auth)
 
                     if response.status_code not in [201, 200]:
                         logger.error(f"Failed to post comment: {response.status_code}")
@@ -316,6 +317,7 @@ class BitbucketIntegration:
 
         headers = self.get_auth_headers()
         headers["Content-Type"] = "application/json"
+        auth = self.get_auth()
 
         comment_data = {
             "content": {
@@ -324,7 +326,7 @@ class BitbucketIntegration:
         }
 
         url = f"{self.api_base}/repositories/{workspace}/{repo_slug}/pullrequests/{pr_id}/comments"
-        response = requests.post(url, json=comment_data, headers=headers)
+        response = requests.post(url, json=comment_data, headers=headers, auth=auth)
 
         if response.status_code not in [201, 200]:
             logger.error(f"Failed to post summary: {response.status_code}")
