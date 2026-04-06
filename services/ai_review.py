@@ -384,12 +384,28 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
             location = None
             if 'location' in comment_data and comment_data['location']:
                 loc_data = comment_data['location']
+                
+                # Helper function to safely convert to int or None
+                def to_int_or_none(val):
+                    if val is None:
+                        return None
+                    if isinstance(val, int):
+                        return val
+                    if isinstance(val, str):
+                        if val.lower() in ('n/a', 'unknown', ''):
+                            return None
+                        try:
+                            return int(val)
+                        except ValueError:
+                            return None
+                    return None
+                
                 location = CodeLocation(
                     file_path=file_path,
-                    line_start=loc_data.get('line_start'),
-                    line_end=loc_data.get('line_end'),
-                    column_start=loc_data.get('column_start'),
-                    column_end=loc_data.get('column_end')
+                    line_start=to_int_or_none(loc_data.get('line_start')),
+                    line_end=to_int_or_none(loc_data.get('line_end')),
+                    column_start=to_int_or_none(loc_data.get('column_start')),
+                    column_end=to_int_or_none(loc_data.get('column_end'))
                 )
 
             return ReviewComment(
