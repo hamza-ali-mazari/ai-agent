@@ -1,9 +1,12 @@
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import logging
 import json
+import os
 from typing import Optional, List, Dict, Any
-from services.ai_review import analyze_code_diff, CodeReviewRequest, CodeReviewResponse
+import requests
+from services.ai_review import AICodeReviewEngine, analyze_code_diff, CodeReviewRequest, CodeReviewResponse
 from models.review import ReviewConfig
 from integrations.bitbucket_integration import BitbucketIntegration, BitbucketWebhookPayload
 
@@ -20,10 +23,50 @@ app = FastAPI(
 # Initialize integrations
 bitbucket_integration = BitbucketIntegration()
 
+@app.on_event("startup")
+async def startup_health_check():
+    """Validate Azure OpenAI connectivity when the app starts."""
+    app.state.azure_openai_available = False
+    app.state.azure_openai_health_message = "Not checked"
+
+    logger.info("Performing Azure OpenAI startup health check")
+    try:
+        engine = AICodeReviewEngine()
+        deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+        if not deployment:
+            raise ValueError("AZURE_OPENAI_DEPLOYMENT is not configured")
+
+        # Validate Azure OpenAI access and deployment availability
+        response = engine.client.chat.completions.create(
+            model=deployment,
+            messages=[{"role": "system", "content": "Health check."}],
+            temperature=0.0,
+            max_tokens=1
+        )
+
+        if not response or not getattr(response, 'choices', None):
+            raise RuntimeError("Azure OpenAI returned an empty response")
+
+        app.state.azure_openai_available = True
+        app.state.azure_openai_health_message = "Azure OpenAI is available"
+        logger.info("Azure OpenAI startup health check succeeded")
+    except Exception as exc:
+        app.state.azure_openai_available = False
+        app.state.azure_openai_health_message = str(exc)
+        logger.error(f"Azure OpenAI startup health check failed: {exc}")
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "version": "2.0.0"}
+    azure_ok = getattr(app.state, "azure_openai_available", False)
+    status_code = 200 if azure_ok else 503
+    status = "healthy" if azure_ok else "degraded"
+    return JSONResponse(status_code=status_code, content={
+        "status": status,
+        "version": "2.0.0",
+        "azure_openai_available": azure_ok,
+        "azure_openai_health_message": app.state.azure_openai_health_message
+    })
 
 class ReviewRequest(BaseModel):
     diff: str
@@ -85,6 +128,12 @@ async def review_code(request: ReviewRequest):
     and actionable recommendations.
     """
     try:
+        if not getattr(app.state, "azure_openai_available", False):
+            raise HTTPException(
+                status_code=503,
+                detail=f"Azure OpenAI unavailable: {app.state.azure_openai_health_message}"
+            )
+
         logger.info("Received code review request")
         if not request.diff.strip():
             raise HTTPException(status_code=400, detail="Diff cannot be empty")
@@ -113,6 +162,12 @@ async def review_code_legacy(request: LegacyReviewRequest):
     Returns simple text-based review (deprecated - use /review instead).
     """
     try:
+        if not getattr(app.state, "azure_openai_available", False):
+            raise HTTPException(
+                status_code=503,
+                detail=f"Azure OpenAI unavailable: {app.state.azure_openai_health_message}"
+            )
+
         logger.info("Received legacy code review request")
         if not request.diff.strip():
             raise HTTPException(status_code=400, detail="Diff cannot be empty")
@@ -154,6 +209,12 @@ async def review_github_repository(request: dict):
     - **branch**: Branch to review (default: "main")
     """
     try:
+        if not getattr(app.state, "azure_openai_available", False):
+            raise HTTPException(
+                status_code=503,
+                detail=f"Azure OpenAI unavailable: {app.state.azure_openai_health_message}"
+            )
+
         from integrations.github_integration import GitHubIntegration
         github_integration = GitHubIntegration()
 
@@ -204,6 +265,12 @@ async def bitbucket_webhook(
     # Get event key from header
     event_key = request.headers.get("X-Event-Key")
     logger.info(f"Event key from header: {event_key}")
+
+    if not getattr(app.state, "azure_openai_available", False):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Azure OpenAI unavailable: {app.state.azure_openai_health_message}"
+        )
 
     # Handle the event in background
     background_tasks.add_task(
