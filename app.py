@@ -32,13 +32,13 @@ async def startup_health_check():
     logger.info("Performing Azure OpenAI startup health check")
     try:
         engine = AICodeReviewEngine()
-        deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
-        if not deployment:
-            raise ValueError("AZURE_OPENAI_DEPLOYMENT is not configured")
+        model_name = engine.model
+        if not model_name:
+            raise ValueError("AZURE_OPENAI_MODEL or AZURE_OPENAI_DEPLOYMENT is not configured")
 
         # Validate Azure OpenAI access and deployment availability
         response = engine.client.chat.completions.create(
-            model=deployment,
+            model=model_name,
             messages=[{"role": "system", "content": "Health check."}],
             temperature=0.0,
             max_tokens=1

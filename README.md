@@ -312,7 +312,8 @@ The AI Code Review Engine uses **Azure OpenAI GPT-4o** for intelligent code anal
 - `AZURE_OPENAI_API_KEY`: Your Azure OpenAI API key
 - `AZURE_OPENAI_API_VERSION`: API version (default: 2023-12-01-preview)
 - `AZURE_OPENAI_ENDPOINT`: Your Azure OpenAI endpoint URL
-- `AZURE_OPENAI_DEPLOYMENT`: Your deployment name
+- `AZURE_OPENAI_MODEL`: Your Azure OpenAI deployment/model name (preferred)
+- `AZURE_OPENAI_DEPLOYMENT`: Your deployment name (fallback)
 
 ### Review Configuration
 

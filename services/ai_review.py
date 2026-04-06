@@ -28,18 +28,25 @@ load_dotenv()
 required_env_vars = [
     "AZURE_OPENAI_API_KEY",
     "AZURE_OPENAI_API_VERSION",
-    "AZURE_OPENAI_ENDPOINT",
-    "AZURE_OPENAI_DEPLOYMENT"
+    "AZURE_OPENAI_ENDPOINT"
 ]
 
 for var in required_env_vars:
     if not os.getenv(var):
         raise ValueError(f"Environment variable {var} is not set")
 
+if not (os.getenv("AZURE_OPENAI_MODEL") or os.getenv("AZURE_OPENAI_DEPLOYMENT")):
+    raise ValueError(
+        "Environment variable AZURE_OPENAI_MODEL or AZURE_OPENAI_DEPLOYMENT must be set"
+    )
+
 # Log Azure OpenAI configuration for debugging
 logger.info(f"Azure OpenAI Endpoint: {os.getenv('AZURE_OPENAI_ENDPOINT')}")
 logger.info(f"Azure OpenAI API Version: {os.getenv('AZURE_OPENAI_API_VERSION')}")
-logger.info(f"Azure OpenAI Deployment: {os.getenv('AZURE_OPENAI_DEPLOYMENT')}")
+logger.info(
+    "Azure OpenAI Model: %s",
+    os.getenv("AZURE_OPENAI_MODEL") or os.getenv("AZURE_OPENAI_DEPLOYMENT")
+)
 
 class AICodeReviewEngine:
     """Professional AI-powered code review engine."""
@@ -50,7 +57,14 @@ class AICodeReviewEngine:
             api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
             azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
         )
-        self.model = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+        self.model = os.getenv("AZURE_OPENAI_MODEL") or os.getenv("AZURE_OPENAI_DEPLOYMENT")
+        if not self.model:
+            raise ValueError("AZURE_OPENAI_MODEL or AZURE_OPENAI_DEPLOYMENT is required")
+        if os.getenv("AZURE_OPENAI_MODEL") and os.getenv("AZURE_OPENAI_DEPLOYMENT") \
+                and os.getenv("AZURE_OPENAI_MODEL") != os.getenv("AZURE_OPENAI_DEPLOYMENT"):
+            logger.warning(
+                "Both AZURE_OPENAI_MODEL and AZURE_OPENAI_DEPLOYMENT are set; using AZURE_OPENAI_MODEL"
+            )
         self.cache = {}  # Simple in-memory cache
 
     def _get_cache_key(self, diff: str, config: ReviewConfig) -> str:
