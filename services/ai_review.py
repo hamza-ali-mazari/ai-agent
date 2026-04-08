@@ -617,120 +617,280 @@ IMPORTANT NOTES:
         return response
 
     def _generate_consolidated_security_analysis(self, all_comments: List[ReviewComment]) -> Dict[str, Any]:
-        """Generate unified security analysis across all files."""
+        """Generate rich, unified security analysis across all files."""
         security_comments = [c for c in all_comments if c.category.value == 'security']
-        
+
         if not security_comments:
             return {
-                "overall_security_posture": "No security vulnerabilities detected",
+                "overall_security_posture": "🛡️ Secure - No security vulnerabilities detected",
                 "critical_vulnerabilities": 0,
                 "high_vulnerabilities": 0,
                 "patterns": [],
-                "recommendations": []
+                "recommendations": [],
+                "risk_level": "Low",
+                "summary": "✅ All security checks passed"
             }
-        
+
         # Categorize by severity
         critical = [c for c in security_comments if c.severity.value == 'critical']
         high = [c for c in security_comments if c.severity.value == 'high']
-        
-        # Identify patterns
+        medium = [c for c in security_comments if c.severity.value == 'medium']
+
+        # Identify patterns with better categorization
         patterns = []
         categories_found = {}
+        vulnerability_types = {
+            'injection': ['sql injection', 'command injection', 'code injection'],
+            'xss': ['cross-site scripting', 'xss'],
+            'authentication': ['auth', 'login', 'password', 'credential'],
+            'authorization': ['access control', 'permission', 'role'],
+            'hardcoded': ['hardcoded', 'secret', 'key', 'token', 'password'],
+            'validation': ['input validation', 'sanitization', 'filtering'],
+            'encryption': ['encryption', 'crypto', 'hash', 'cipher']
+        }
+
         for comment in security_comments:
             title_lower = comment.title.lower()
-            for pattern in ['injection', 'xss', 'authentication', 'authorization', 'hardcoded', 'validation', 'encryption']:
-                if pattern in title_lower:
-                    categories_found[pattern] = categories_found.get(pattern, 0) + 1
-        
+            description_lower = (comment.description or '').lower()
+
+            for vuln_type, keywords in vulnerability_types.items():
+                if any(keyword in title_lower or keyword in description_lower for keyword in keywords):
+                    categories_found[vuln_type] = categories_found.get(vuln_type, 0) + 1
+
         if categories_found:
-            patterns = [f"{cat.title()}: {count} issue(s)" for cat, count in sorted(categories_found.items(), key=lambda x: x[1], reverse=True)]
-        
-        # Generate posture
+            patterns = [f"**{cat.title()}:** {count} issue(s)" for cat, count in sorted(categories_found.items(), key=lambda x: x[1], reverse=True)]
+
+        # Generate rich posture with risk assessment
         total_sec_issues = len(security_comments)
-        if total_sec_issues == 0:
-            posture = "Secure - No vulnerabilities found"
-        elif len(critical) > 0:
-            posture = f"🚨 Critical - {len(critical)} critical vulnerability/vulnerabilities found"
+        if len(critical) > 0:
+            posture = f"🚨 **CRITICAL RISK** - {len(critical)} critical vulnerability/vulnerabilities found"
+            risk_level = "Critical"
+            summary = f"🔴 Immediate action required - {len(critical)} critical security issues must be fixed before merge"
         elif len(high) > 0:
-            posture = f"⚠️ High Risk - {len(high)} high-severity issue(s) found"
+            posture = f"⚠️ **HIGH RISK** - {len(high)} high-severity issue(s) found"
+            risk_level = "High"
+            summary = f"🟠 Security vulnerabilities detected - address before deployment"
+        elif len(medium) > 0:
+            posture = f"🟡 **MEDIUM RISK** - {len(medium)} security concerns identified"
+            risk_level = "Medium"
+            summary = f"🟡 Security improvements recommended"
         else:
-            posture = "⚡ Medium Risk - Multiple lower-severity security issues"
-        
+            posture = f"🛡️ **SECURE** - No significant security issues found"
+            risk_level = "Low"
+            summary = f"✅ Security checks passed"
+
+        # Enhanced recommendations
+        recommendations = []
+        if total_sec_issues > 0:
+            if len(critical) > 0:
+                recommendations.append("🚨 **URGENT:** Fix all critical vulnerabilities immediately")
+            if len(high) > 0:
+                recommendations.append("⚠️ **HIGH PRIORITY:** Address high-severity security issues")
+            if patterns:
+                recommendations.append(f"🔍 **PATTERNS:** Review {', '.join([p.split(':')[0].replace('**', '') for p in patterns[:3]])} vulnerabilities")
+            recommendations.append("🧪 **TESTING:** Add security tests to prevent regression")
+            recommendations.append("📚 **TRAINING:** Consider security training for development team")
+
         return {
             "overall_security_posture": posture,
             "critical_vulnerabilities": len(critical),
             "high_vulnerabilities": len(high),
+            "medium_vulnerabilities": len(medium),
             "total_security_issues": total_sec_issues,
             "patterns": patterns,
-            "recommendations": [
-                "Apply security fixes in order of severity (Critical → High → Medium)",
-                "Review security best practices for the patterns identified",
-                "Consider adding security tests for validation"
-            ] if total_sec_issues > 0 else []
+            "risk_level": risk_level,
+            "summary": summary,
+            "recommendations": recommendations,
+            "severity_breakdown": {
+                "critical": len(critical),
+                "high": len(high),
+                "medium": len(medium),
+                "low": len([c for c in security_comments if c.severity.value == 'low'])
+            }
         }
 
     def _generate_overall_feedback(self, summary: ReviewSummary, files: List[FileReview], security_analysis: Dict[str, Any]) -> str:
-        """Generate concise, non-repetitive overall feedback."""
+        """Generate rich, comprehensive overall feedback with visual indicators and detailed analysis."""
         if summary.analysis_errors > 0:
             return (
-                "⚠️ Analysis incomplete: AI analysis failed for one or more files. "
-                "Please verify your OpenAI credentials and retry the review."
+                "## ⚠️ Analysis Incomplete\n\n"
+                "**Issue:** AI analysis failed for one or more files\n"
+                "**Action:** Please verify your Azure OpenAI credentials and retry the review\n\n"
+                "---"
             )
 
+        # Score indicator with emoji
         score = summary.overall_score
-        
-        # Score-based message (single, not repetitive)
         if score >= 90:
-            main_feedback = "✅ Excellent - High-quality changes with minimal issues"
+            score_emoji = "🎉"
+            score_desc = "Excellent"
         elif score >= 80:
-            main_feedback = "👍 Good - Solid changes with some minor improvements needed"
+            score_emoji = "✅"
+            score_desc = "Good"
         elif score >= 70:
-            main_feedback = "🔍 Review needed - Several areas require attention"
+            score_emoji = "⚠️"
+            score_desc = "Needs Attention"
         elif score >= 60:
-            main_feedback = "⚠️ Issues found - Significant items need addressing before merge"
+            score_emoji = "🟡"
+            score_desc = "Significant Issues"
         else:
-            main_feedback = "🛑 Major issues - Substantial improvements required"
+            score_emoji = "🔴"
+            score_desc = "Critical Review Required"
 
-        # Add count summary (not duplicate)
-        details = f"Score: {score}/100. Found {summary.total_comments} issues: "
-        details += f"{summary.critical_issues} critical, {summary.high_issues} high, {summary.medium_issues} medium"
-        
-        # Add security posture if relevant
-        if security_analysis and 'overall_security_posture' in security_analysis:
-            details += f". Security: {security_analysis['overall_security_posture']}"
+        # Build rich feedback
+        feedback_parts = []
 
-        return f"{main_feedback}. {details}"
+        # Main assessment header
+        feedback_parts.append(f"## {score_emoji} Code Review Summary")
+        feedback_parts.append(f"**Overall Score:** {score}/100 ({score_desc})")
+
+        # Issue breakdown with visual indicators
+        issues = []
+        if summary.critical_issues > 0:
+            issues.append(f"🔴 {summary.critical_issues} Critical")
+        if summary.high_issues > 0:
+            issues.append(f"🟠 {summary.high_issues} High")
+        if summary.medium_issues > 0:
+            issues.append(f"🟡 {summary.medium_issues} Medium")
+        if summary.low_issues > 0:
+            issues.append(f"🔵 {summary.low_issues} Low")
+        if summary.info_suggestions > 0:
+            issues.append(f"ℹ️ {summary.info_suggestions} Info")
+
+        if issues:
+            feedback_parts.append(f"**Issues Found:** {' | '.join(issues)}")
+
+        # Enhanced Security Analysis Section
+        security_posture = security_analysis.get('overall_security_posture', 'Unknown')
+        risk_level = security_analysis.get('risk_level', 'Unknown')
+        total_sec_issues = security_analysis.get('total_security_issues', 0)
+
+        if total_sec_issues > 0:
+            feedback_parts.append(f"**Security Risk:** {risk_level} ({total_sec_issues} issues)")
+            feedback_parts.append(f"**Security Status:** {security_posture}")
+
+            # Security breakdown if issues exist
+            severity_breakdown = security_analysis.get('severity_breakdown', {})
+            if severity_breakdown:
+                sec_details = []
+                if severity_breakdown.get('critical', 0) > 0:
+                    sec_details.append(f"🚨 {severity_breakdown['critical']} Critical")
+                if severity_breakdown.get('high', 0) > 0:
+                    sec_details.append(f"⚠️ {severity_breakdown['high']} High")
+                if severity_breakdown.get('medium', 0) > 0:
+                    sec_details.append(f"🟡 {severity_breakdown['medium']} Medium")
+                if sec_details:
+                    feedback_parts.append(f"**Security Breakdown:** {' | '.join(sec_details)}")
+
+            # Security patterns if available
+            patterns = security_analysis.get('patterns', [])
+            if patterns:
+                feedback_parts.append(f"**Vulnerability Patterns:** {', '.join(patterns[:3])}")
+        else:
+            feedback_parts.append(f"**Security:** 🛡️ {security_posture}")
+
+        # Files analyzed
+        total_files = len(files)
+        files_with_issues = sum(1 for f in files if f.comments)
+        feedback_parts.append(f"**Files Analyzed:** {total_files} ({files_with_issues} with issues)")
+
+        # Enhanced Dependency Analysis Section
+        dep_issues = []
+        dep_summary = {"critical": 0, "high": 0, "medium": 0, "total": 0}
+
+        for file in files:
+            if file.metrics and 'dependency_analysis' in file.metrics:
+                dep_analysis = file.metrics['dependency_analysis']
+                if dep_analysis.get('issues'):
+                    for issue in dep_analysis['issues']:
+                        dep_issues.append(issue)
+                        severity = issue.get('severity', 'medium')
+                        dep_summary[severity] = dep_summary.get(severity, 0) + 1
+                        dep_summary['total'] += 1
+
+        if dep_summary['total'] > 0:
+            feedback_parts.append(f"**Dependencies:** ⚠️ {dep_summary['total']} issues found")
+            dep_breakdown = []
+            if dep_summary['critical'] > 0:
+                dep_breakdown.append(f"🚨 {dep_summary['critical']} Critical")
+            if dep_summary['high'] > 0:
+                dep_breakdown.append(f"⚠️ {dep_summary['high']} High")
+            if dep_summary['medium'] > 0:
+                dep_breakdown.append(f"🟡 {dep_summary['medium']} Medium")
+            if dep_breakdown:
+                feedback_parts.append(f"**Dependency Issues:** {' | '.join(dep_breakdown)}")
+
+        # Add summary from security analysis
+        security_summary = security_analysis.get('summary', '')
+        if security_summary:
+            feedback_parts.append(f"**Summary:** {security_summary}")
+
+        feedback_parts.append("---")
+
+        # Join with proper formatting
+        return "\n".join(feedback_parts)
 
     def _generate_recommendations(self, summary: ReviewSummary, files: List[FileReview]) -> List[str]:
-        """Generate actionable, non-repetitive recommendations."""
+        """Generate rich, prioritized recommendations with visual indicators."""
         recommendations = []
 
-        # Critical/High priority
+        # Priority-based sections
+        priority_sections = []
+
+        # Critical/High priority section
+        critical_high = []
         if summary.critical_issues > 0:
-            recommendations.append("🛑 Fix all critical issues before merging")
-        
+            critical_high.append("🛑 **BLOCKING:** Fix all critical issues before merging")
         if summary.high_issues > 0:
-            recommendations.append("⚠️ Address high-priority issues to reduce risk")
+            critical_high.append("⚠️ **HIGH PRIORITY:** Address high-severity issues to reduce risk")
 
-        # Medium issues
-        if summary.medium_issues > 3:
-            recommendations.append("💡 Consider breaking down changes into smaller, focused PRs")
-        
-        # Size check
-        if summary.total_comments > 20:
-            recommendations.append("📦 Large PR detected - split into multiple focused changes for easier review")
+        if critical_high:
+            priority_sections.extend(critical_high)
 
-        # Security recommendations
-        security_issues = sum(1 for _ in [file.comments for file in files] for comment in _ 
+        # Security section
+        security_issues = sum(1 for file in files for comment in file.comments
                             if comment.category.value == 'security')
         if security_issues > 0:
-            recommendations.append("🔒 Apply security fixes in order of severity")
+            priority_sections.append("🔒 **SECURITY:** Apply security fixes in order of severity (Critical → High → Medium)")
 
-        # Overall quality
+        # Size and complexity section
+        complexity = []
+        if summary.medium_issues > 3:
+            complexity.append("💡 **REFACTOR:** Consider breaking down changes into smaller, focused PRs")
+        if summary.total_comments > 20:
+            complexity.append("📦 **SIZE:** Large PR detected - split into multiple focused changes for easier review")
+
+        if complexity:
+            priority_sections.extend(complexity)
+
+        # Quality improvement section
+        quality = []
         if summary.overall_score < 70:
-            recommendations.append("📋 Schedule a follow-up review after addressing feedback")
+            quality.append("📋 **FOLLOW-UP:** Schedule a follow-up review after addressing feedback")
+        elif summary.overall_score >= 80:
+            quality.append("✅ **APPROVED:** Code meets quality standards - ready for merge")
 
-        return recommendations
+        if quality:
+            priority_sections.extend(quality)
+
+        # Dependency recommendations
+        dep_recs = []
+        for file in files:
+            if file.metrics and 'dependency_analysis' in file.metrics:
+                dep_analysis = file.metrics['dependency_analysis']
+                if dep_analysis.get('issues'):
+                    critical_deps = sum(1 for i in dep_analysis['issues'] if i.get('severity') == 'critical')
+                    if critical_deps > 0:
+                        dep_recs.append("📦 **DEPENDENCIES:** Update critical dependency vulnerabilities immediately")
+
+        if dep_recs:
+            priority_sections.extend(dep_recs)
+
+        # If no specific recommendations, provide general guidance
+        if not priority_sections:
+            priority_sections.append("✅ **APPROVED:** No blocking issues found - code is ready for merge")
+
+        return priority_sections
 
 
 # Global instance
