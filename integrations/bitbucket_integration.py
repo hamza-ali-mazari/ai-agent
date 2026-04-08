@@ -29,8 +29,9 @@ class BitbucketWebhookPayload(BaseModel):
 class BitbucketIntegration:
     """Bitbucket integration for AI Code Review Engine."""
 
-    def __init__(self, base_url: str = "http://localhost:8000", is_server: bool = False):
+    def __init__(self, base_url: str = "http://localhost:8000", is_server: bool = False, kafka_handler: Optional[Any] = None):
         self.base_url = base_url
+        self.kafka_handler = kafka_handler
         self.bitbucket_username = os.getenv("BITBUCKET_USERNAME")
         self.bitbucket_token = os.getenv("BITBUCKET_TOKEN")  # App password or access token
         self.bitbucket_app_password = os.getenv("BITBUCKET_APP_PASSWORD")
@@ -105,8 +106,21 @@ class BitbucketIntegration:
         workspace = repo.get("workspace", {}).get("slug") or repo.get("owner", {}).get("username")
         repo_slug = repo.get("slug") or repo.get("name", "unknown")
         pr_id = pr["id"]
+        destination_branch = pr.get("destination", {}).get("branch", {}).get("name", "master")
 
         logger.info(f"Processing PR #{pr_id} in {workspace}/{repo_slug}")
+
+        # Emit review started event
+        if self.kafka_handler:
+            try:
+                self.kafka_handler.create_review_event(
+                    pr_id=pr_id,
+                    repository=f"{workspace}/{repo_slug}",
+                    event_type="review:started"
+                )
+                logger.info(f"Emitted review:started event for PR#{pr_id}")
+            except Exception as e:
+                logger.warning(f"Failed to emit review:started event: {str(e)}")
 
         try:
             # Get PR diff
@@ -142,6 +156,39 @@ class BitbucketIntegration:
             review_response = await self.call_review_engine(review_request)
             logger.info(f"AI review completed for PR #{pr_id}")
 
+            # Emit analysis complete event
+            summary = review_response.get("summary", {})
+            has_critical = summary.get("critical_issues", 0) > 0
+            if self.kafka_handler:
+                try:
+                    self.kafka_handler.create_analysis_complete_event(
+                        pr_id=pr_id,
+                        repository=f"{workspace}/{repo_slug}",
+                        analysis_complete=True,
+                        has_critical_issues=has_critical,
+                        summary=summary
+                    )
+                    logger.info(f"Emitted review:analysis_complete event for PR#{pr_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to emit analysis_complete event: {str(e)}")
+
+            # Emit security issue events for critical/high issues
+            if self.kafka_handler:
+                for file_review in review_response.get("files", []):
+                    for comment in file_review.get("comments", []):
+                        if comment.get("category") == "security" and comment.get("severity") in ["critical", "high"]:
+                            try:
+                                self.kafka_handler.create_security_issue_event(
+                                    pr_id=pr_id,
+                                    repository=f"{workspace}/{repo_slug}",
+                                    file_path=file_review.get("file_path"),
+                                    severity=comment.get("severity"),
+                                    title=comment.get("title"),
+                                    description=comment.get("description", "")
+                                )
+                            except Exception as e:
+                                logger.warning(f"Failed to emit security event: {str(e)}")
+
             # Post review comments to Bitbucket
             logger.info(f"Posting review comments for PR #{pr_id}")
             await self.post_review_comments(workspace, repo_slug, pr_id, review_response)
@@ -152,11 +199,31 @@ class BitbucketIntegration:
             await self.post_review_summary(workspace, repo_slug, pr_id, review_response)
             logger.info(f"Review summary posted for PR #{pr_id}")
 
-            # Post overall review summary
-            await self.post_review_summary(workspace, repo_slug, pr_id, review_response)
+            # Emit approval ready event (if destination is master or sit and no critical issues)
+            if self.kafka_handler and destination_branch.lower() in ["master", "sit"] and not has_critical:
+                try:
+                    self.kafka_handler.create_approval_ready_event(
+                        pr_id=pr_id,
+                        repository=f"{workspace}/{repo_slug}",
+                        destination_branch=destination_branch,
+                        reviewer_comments=f"Analysis complete. Overall score: {summary.get('overall_score', 0)}/100"
+                    )
+                    logger.info(f"Emitted review:approval_ready event for PR#{pr_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to emit approval_ready event: {str(e)}")
 
         except Exception as e:
             logger.error(f"Error processing PR #{pr_id}: {str(e)}")
+            # Emit failure event
+            if self.kafka_handler:
+                try:
+                    self.kafka_handler.create_review_event(
+                        pr_id=pr_id,
+                        repository=f"{workspace}/{repo_slug}",
+                        event_type="review:failed"
+                    )
+                except Exception as ex:
+                    logger.warning(f"Failed to emit review:failed event: {str(ex)}")
 
     def get_pull_request_diff(self, workspace: str, repo_slug: str, pr_id: int) -> Optional[str]:
         """Get diff content from Bitbucket PR."""

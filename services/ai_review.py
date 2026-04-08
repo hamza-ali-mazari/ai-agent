@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 from openai import AzureOpenAI
 from dotenv import load_dotenv
+from services.dependency_analyzer import DependencyAnalyzer
 from models.review import (
     CodeReviewRequest,
     CodeReviewResponse,
@@ -66,6 +67,7 @@ class AICodeReviewEngine:
                 "Both AZURE_OPENAI_MODEL and AZURE_OPENAI_DEPLOYMENT are set; using AZURE_OPENAI_MODEL"
             )
         self.cache = {}  # Simple in-memory cache
+        self.dependency_analyzer = DependencyAnalyzer()
 
     def _get_cache_key(self, diff: str, config: ReviewConfig) -> str:
         """Generate cache key for review requests."""
@@ -499,6 +501,19 @@ IMPORTANT NOTES:
             # Limit comments per file
             comments = comments[:config.max_comments_per_file]
 
+            # Analyze dependencies for this file
+            language = file_info.get('language', '').lower()
+            changes_content = '\n'.join(file_info.get('changes', []))
+            try:
+                dependency_analysis = self.dependency_analyzer.analyze_file_dependencies(
+                    file_info['path'],
+                    changes_content,
+                    language
+                )
+            except Exception as e:
+                logger.warning(f"Dependency analysis failed for {file_info['path']}: {str(e)}")
+                dependency_analysis = {}
+
             # Update metrics with security information
             metrics = ai_response.get('metrics', {})
             if 'security_score' not in metrics:
@@ -509,6 +524,10 @@ IMPORTANT NOTES:
                 security_score = max(0, 100 - (vuln_count * 15) - sum(20 if c.severity.value in ['critical', 'high'] else 0 for c in security_issues))
                 metrics['security_score'] = security_score
                 metrics['vulnerability_count'] = vuln_count
+
+            # Add dependency analysis results to metrics
+            if dependency_analysis:
+                metrics['dependency_analysis'] = dependency_analysis
 
             # Keep summary but make it concise (not repetitive)
             file_summary = ai_response.get('summary', '')

@@ -1,13 +1,17 @@
 # AI Code Review Engine
 
-A professional, enterprise-grade AI-powered code review engine designed for seamless integration with GitHub and Bitbucket. Similar to CodeRabbit and Bito AI, this engine provides comprehensive, structured code analysis for pull requests and code changes.
+A professional, enterprise-grade AI-powered code review engine designed for seamless integration with Bitbucket. Similar to CodeRabbit and Bito AI, this engine provides comprehensive, structured code analysis for pull requests and code changes with Kafka-driven event architecture for optimized workflows.
 
 ## Features
 
+- **Kafka-Driven Architecture**: Event-based workflow with optimized suggestion generation
+- **Deep Dependency Analysis**: Identifies dependency conflicts, transitive dependencies, and vulnerabilities across Python, Node.js, Java, C#, Go, and Rust
+- **Approval Workflow Control**: Strict approval/merge gating based on analysis completion and destination branch
 - **Structured Analysis**: Detailed file-by-file code review with severity levels
 - **Multiple Categories**: Bugs, security issues, performance, maintainability, style, best practices
 - **AI-Powered Insights**: Uses advanced language models for intelligent code analysis
 - **Inline Code Suggestions**: Provides actionable code suggestions that can be applied directly in PRs
+- **Consolidated Security Analysis**: Unified security assessment across all changed files
 - **Multi-Language Support**: Supports 40+ programming languages and file types including Python, JavaScript, TypeScript, Java, C++, Go, Rust, PHP, Ruby, and more
 - **Configurable Rules**: Customizable review criteria and severity thresholds
 - **RESTful API**: Clean, documented API for easy integration
@@ -23,10 +27,12 @@ ai-code-review-engine/
 │   └── review.py          # Review request/response models
 ├── services/              # Business logic
 │   ├── __init__.py
-│   └── ai_review.py       # Core AI review engine
+│   ├── ai_review.py       # Core AI review engine
+│   ├── kafka_config.py    # Kafka event handler & approval workflow
+│   └── dependency_analyzer.py  # Deep dependency analysis
 ├── integrations/          # Platform integrations
 │   ├── __init__.py
-│   └── github_integration.py  # GitHub webhook handler
+│   └── bitbucket_integration.py  # Bitbucket webhook handler
 ├── tests/                 # Unit and integration tests
 │   └── test_api.py
 ├── app.py                 # FastAPI application
@@ -43,7 +49,7 @@ ai-code-review-engine/
 git clone <your-repo-url>
 cd ai-code-review-engine
 cp .env.example .env
-# Edit .env with your API keys and tokens
+# Edit .env with your Azure OpenAI and Bitbucket credentials
 ```
 
 ### 2. Install Dependencies
@@ -51,52 +57,46 @@ cp .env.example .env
 pip install -r requirements.txt
 ```
 
-### 3. Run All Services
-```bash
-# Linux/Mac
-./start.sh
+### 3. Configure Environment Variables
 
-# Windows
-start.bat
+Create a `.env` file with:
+
+```bash
+# Azure OpenAI Configuration
+AZURE_OPENAI_API_KEY=your_api_key
+AZURE_OPENAI_ENDPOINT=https://your-instance.openai.azure.com
+AZURE_OPENAI_API_VERSION=2025-01-01-preview
+AZURE_OPENAI_MODEL=gpt-4o-india-atul-b2b
+
+# Bitbucket Configuration
+BITBUCKET_OAUTH_TOKEN=your_oauth_token_or_app_password
+BITBUCKET_USERNAME=your_username  # Required if using app password
+BITBUCKET_WEBHOOK_SECRET=your_webhook_secret
+
+# Optional: Kafka Configuration
+KAFKA_BROKER=localhost:9092
+KAFKA_TOPIC_PREFIX=code-review
 ```
 
-Or run services individually:
+### 4. Run the Application
 ```bash
-# Main API server
-uvicorn app:app --reload --host 0.0.0.0 --port 8000
-
-# GitHub integration (separate terminal)
-python integrations/github_integration.py
-
-# Bitbucket integration (separate terminal)
-python integrations/bitbucket_integration.py
+# Start the main API server
+uvicorn app:app --reload --host 0.0.0.0 --port 10000
 ```
 
-### 4. Access Services
-- **Main API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
-- **GitHub Integration**: http://localhost:8001 (if configured)
-- **Bitbucket Integration**: http://localhost:8002 (if configured)
+### 5. Access Services
+- **Main API**: http://localhost:10000
+- **API Documentation**: http://localhost:10000/docs
+- **Health Check**: http://localhost:10000/health
 
-## Setup
+### 6. Configure Bitbucket Webhook
+1. Go to your Bitbucket repository
+2. Settings → Webhooks → Add webhook
+3. URL: `http://your-server.com:10000/webhook/bitbucket`
+4. Events: Pull request (created, updated, reopened)
+5. Active: ✓
+6. Secret: Same as `BITBUCKET_WEBHOOK_SECRET`
 
-1. **Clone and Install Dependencies**
-   ```bash
-   git clone <repository-url>
-   cd ai-code-review-engine
-   pip install -r requirements.txt
-   ```
-
-2. **Environment Configuration**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your Azure OpenAI credentials
-   ```
-
-3. **Run the Application**
-   ```bash
-   uvicorn app:app --reload --host 0.0.0.0 --port 8000
-   ```
 
 ## API Documentation
 
@@ -178,15 +178,14 @@ Perform comprehensive AI-powered code review.
 
 ## Inline Code Suggestions
 
-The AI Code Review Engine now supports **inline code suggestions** that can be applied directly within pull request interfaces on GitHub and Bitbucket.
+The AI Code Review Engine now supports **inline code suggestions** that can be applied directly within pull request interfaces on Bitbucket.
 
 ### How It Works
 
-When reviewing code changes, the AI analyzes the diff and generates specific, actionable code replacements for identified issues. These suggestions appear as inline comments that developers can apply with a single click.
+When reviewing code changes, the AI analyzes the diff and generates specific, actionable code replacements for identified issues. These suggestions appear as inline comments in the PR that developers can reference for fixes.
 
 ### Features
 
-- **GitHub Integration**: Uses ```suggestion blocks for one-click application
 - **Bitbucket Integration**: Provides formatted code suggestions in PR comments
 - **Precise Location**: Suggestions are tied to specific line numbers in the diff
 - **Actionable Fixes**: Each suggestion includes the exact replacement code
@@ -196,22 +195,6 @@ When reviewing code changes, the AI analyzes the diff and generates specific, ac
 
 For a security issue like plain-text password storage, the AI might suggest:
 
-**GitHub Format:**
-```markdown
-🔴 Plain text password storage
-
-**Category:** Security  
-**Severity:** High
-
-Storing passwords in plain text is a security vulnerability
-
-**Suggestion:** Use proper password hashing with bcrypt
-
-```suggestion
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-```
-```
-
 **Bitbucket Format:**
 ```markdown
 🔴 Plain text password storage
@@ -219,13 +202,13 @@ Storing passwords in plain text is a security vulnerability
 **Category:** Security  
 **Severity:** High
 
-Storing passwords in plain text is a security vulnerability
+Storing passwords in plain text is a security vulnerability.
 
 **Suggestion:** Use proper password hashing with bcrypt
 
 **Suggested change:**
-```diff
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+```python
+hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
 ```
 ```
 
@@ -336,35 +319,23 @@ Customize review behavior through the `config` parameter:
 
 ## Integration Examples
 
-### GitHub Integration
+### Bitbucket Cloud Integration
 
-```python
-import requests
+The engine includes comprehensive Bitbucket integration with automatic webhook handling:
 
-def review_pull_request(pr_number, diff_content):
-    response = requests.post('http://localhost:8000/review', json={
-        'diff': diff_content,
-        'repository_url': f'https://github.com/owner/repo',
-        'branch': f'pr-{pr_number}',
-        'config': {
-            'enabled_categories': ['bugs', 'security'],
-            'severity_threshold': 'high'
-        }
-    })
+#### Features:
+- **PR Review**: Automatic review of pull request diffs
+- **File Analysis**: Gets all changed files for comprehensive analysis
+- **Deep Dependency Analysis**: Identifies and reports dependency issues
+- **Security Analysis**: Consolidated security assessment across all files
+- **Approval Workflow**: Gated approvals based on analysis completion and branch destination (master/sit only)
+- **Kafka Events**: Emits events for analysis workflow coordination
+- **Comment Posting**: Posts review comments and summaries to PRs
+- **Multi-Platform**: Supports both Bitbucket Cloud and Bitbucket Server/Data Center
+- **Authentication**: Supports OAuth tokens and personal access tokens
 
-    review = response.json()
-
-    # Post comments to GitHub PR
-    for file_review in review['files']:
-        for comment in file_review['comments']:
-            if comment['severity'] in ['critical', 'high']:
-                # Post GitHub comment
-                pass
-```
-
-### Bitbucket Integration
-
-Similar pattern for Bitbucket webhooks and API calls.
+#### Setup for Bitbucket Cloud:
+```bash
 
 ## Development
 
@@ -402,49 +373,23 @@ black .
 
 ## Integrations
 
-### GitHub Integration
+### Bitbucket Cloud Integration
 
-The engine includes comprehensive GitHub integration in `integrations/github_integration.py`:
-
-#### Features:
-- **PR Review**: Automatic review of pull request diffs
-- **File Analysis**: Gets all changed files for comprehensive analysis
-- **Deep Analysis**: Optional full file content analysis (configurable)
-- **Repository Review**: Review all code files in an entire repository
-- **Comment Posting**: Posts review comments and summaries to PRs
-- **Authentication**: Supports GitHub tokens and webhook secrets
-
-#### Setup:
-```bash
-# Set environment variables
-export GITHUB_TOKEN=your_github_token
-export GITHUB_WEBHOOK_SECRET=your_webhook_secret
-export GITHUB_DEEP_ANALYSIS=true  # Optional: enable deep file analysis
-
-# Run the integration server
-python integrations/github_integration.py
-```
-
-#### API Endpoints:
-- **`POST /review/repository/github`**: Review entire GitHub repository
-
-#### GitHub App Setup:
-1. Create a GitHub App in your organization
-2. Set webhook URL to your server endpoint
-3. Subscribe to "Pull request" events
-4. Install the app on your repositories
-5. Set repository permissions for contents, pull requests, and issues
-
-### Bitbucket Integration
-
-Complete Bitbucket integration in `integrations/bitbucket_integration.py`:
+Complete Bitbucket integration with Kafka-driven events and approval workflows in `integrations/bitbucket_integration.py`:
 
 #### Features:
 - **PR Review**: Automatic review of pull request diffs
+- **Deep Dependency Analysis**: Identifies dependency conflicts and vulnerabilities
+- **Consolidated Security Analysis**: Single unified security assessment across all files
+- **Approval Workflow**: Automatic approval readiness check based on:
+  - Analysis completion
+  - No critical security issues
+  - Destination branch (master/sit only)
+- **Kafka Events**: Emits review workflow events for external system coordination
 - **File Analysis**: Gets all changed files for comprehensive analysis
 - **Comment Posting**: Posts review comments and summaries to PRs
 - **Multi-Platform**: Supports both Bitbucket Cloud and Bitbucket Server/Data Center
-- **Authentication**: Supports API tokens and personal access tokens (app passwords deprecated)
+- **Authentication**: Supports OAuth tokens and personal access tokens
 
 #### Setup for Bitbucket Cloud:
 ```bash
@@ -453,55 +398,145 @@ export BITBUCKET_USERNAME=your_username
 export BITBUCKET_TOKEN=your_app_password_or_access_token
 export BITBUCKET_WEBHOOK_SECRET=your_webhook_secret
 
-# Alternatively, if using OAuth tokens:
-# export BITBUCKET_OAUTH_TOKEN=your_oauth_token
+# Alternatively, if using OAuth tokens (recommended):
+export BITBUCKET_OAUTH_TOKEN=your_oauth_token
 
-# Run the integration server
-python integrations/bitbucket_integration.py
+# Install dependencies and run
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 10000
 ```
 
-#### Setup for Bitbucket Server:
+#### Setup for Bitbucket Server/Data Center:
 ```bash
 # Set environment variables
 export BITBUCKET_TOKEN=your_personal_access_token
 export BITBUCKET_SERVER_URL=https://your-bitbucket-server.com
 export BITBUCKET_WEBHOOK_SECRET=your_webhook_secret
 
-# Run the integration server
-python integrations/bitbucket_integration.py
+# Run the application
+uvicorn app:app --host 0.0.0.0 --port 10000
 ```
 
 #### Bitbucket Webhook Setup:
 1. Go to Repository Settings → Webhooks
-2. Add webhook URL pointing to your server
-3. Select "Pull request" events
+2. Add webhook URL: `{your_server}/webhook/bitbucket`
+3. Select the following events:
+   - Pull request created
+   - Pull request updated
+   - Pull request reopened
 4. Set webhook secret for security
+5. Check "Skip certificate verification" (if using self-signed certs)
+
+#### Kafka Event Types Emitted:
+- `review:started` - Analysis started
+- `review:analysis_complete` - Analysis finished
+- `review:security_issue` - Security issue found (critical/high)
+- `review:approval_ready` - Ready for approval (no critical issues, valid branch)
+- `review:merge_requested` - Merge requested
+- `review:failed` - Analysis failed
+
+#### Approval Endpoint:
+```
+POST /bitbucket/approval/{workspace}/{repo_slug}/{pr_id}
+```
+
+**Request:**
+```json
+{
+  "analysis_complete": true,
+  "has_critical_issues": false,
+  "destination_branch": "master"
+}
+```
+
+**Response:**
+```json
+{
+  "can_approve": true,
+  "can_merge": true,
+  "allowed_destinations": ["master", "sit"],
+  "reason": "Code ready for approval"
+}
+```
+
+## Kafka Configuration
+
+The engine emits events to Kafka for workflow coordination:
+
+```bash
+# Set environment variables
+export KAFKA_BROKER=localhost:9092
+export KAFKA_TOPIC_PREFIX=code-review
+
+# Events are automatically emitted on:
+# - PR analysis start
+# - Analysis completion with summary
+# - Security issues (high/critical)
+# - Approval readiness status
+```
+
+## Dependency Analysis
+
+The engine performs deep dependency analysis across multiple languages:
+
+**Supported Languages:**
+- Python (requirements.txt, setup.py, pyproject.toml)
+- Node.js (package.json, package-lock.json, yarn.lock)
+- Java (pom.xml, build.gradle)
+- C# (.csproj, packages.config)
+- Go (go.mod, go.sum)
+- Rust (Cargo.toml, Cargo.lock)
+
+**Analysis Includes:**
+- Direct and transitive dependency detection
+- Version conflict identification
+- Known vulnerability checking
+- Deprecated package detection
+- Unused dependency identification
+
+**Example Output:**
+```json
+{
+  "total_packages": 45,
+  "conflicts": ["package-a: 1.0 vs 2.0"],
+  "critical_issues": ["log4j: CVE-2021-44228"],
+  "recommendations": [
+    "Update log4j to 2.17.0 or later",
+    "Remove unused dependency: old-lib"
+  ]
+}
+```
 
 ## Usage Examples
 
-### GitHub PR Review
+### Bitbucket PR Review (Automatic)
 ```python
-# Automatic via webhook - no code needed
-# Webhook triggers on PR open/update
+# No code needed - webhook automatically triggers on:
+# - PR creation
+# - PR update
+# - PR reopening
+
+# Review results are automatically posted as PR comments
 ```
 
-### GitHub Repository Review
+### Check Approval Status
 ```python
 import requests
 
-response = requests.post('http://localhost:8000/review/repository/github', json={
-    'repo_full_name': 'owner/repository-name',
-    'branch': 'main'
-})
+response = requests.post(
+    'http://localhost:10000/bitbucket/approval/workspace/repo/123',
+    json={
+        'analysis_complete': True,
+        'has_critical_issues': False,
+        'destination_branch': 'master'
+    }
+)
 
-review = response.json()
-print(f"Repository score: {review['summary']['overall_score']}")
-```
-
-### Bitbucket PR Review
-```python
-# Automatic via webhook - no code needed
-# Webhook triggers on PR events
+approval = response.json()
+if approval['can_merge']:
+    print("✓ Ready to merge")
+else:
+    print(f"✗ Cannot merge: {approval['reason']}")
 ```
 
 ## Configuration Options

@@ -7,6 +7,7 @@ import os
 from typing import Optional, List, Dict, Any
 import requests
 from services.ai_review import AICodeReviewEngine, analyze_code_diff, CodeReviewRequest, CodeReviewResponse
+from services.kafka_config import KafkaConfigHandler
 from models.review import ReviewConfig
 from integrations.bitbucket_integration import BitbucketIntegration, BitbucketWebhookPayload
 
@@ -16,12 +17,13 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="AI Code Review Engine",
-    description="Professional AI-powered code review engine for GitHub and Bitbucket integrations",
+    description="Professional AI-powered code review engine for Bitbucket with Kafka-driven event architecture and deep dependency analysis",
     version="2.0.0"
 )
 
-# Initialize integrations
-bitbucket_integration = BitbucketIntegration()
+# Initialize integrations and services
+kafka_handler = KafkaConfigHandler()
+bitbucket_integration = BitbucketIntegration(kafka_handler=kafka_handler)
 
 @app.on_event("startup")
 async def startup_health_check():
@@ -196,48 +198,7 @@ async def review_code_legacy(request: LegacyReviewRequest):
         logger.error(f"Unexpected error in review_code_legacy: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.post("/review/repository/github", response_model=CodeReviewResponse, responses={
-    200: {"description": "Successful repository review"},
-    400: {"description": "Bad request"},
-    500: {"description": "Internal server error"}
-})
-async def review_github_repository(request: dict):
-    """
-    Review all code files in a GitHub repository.
-    
-    - **repo_full_name**: GitHub repository in format "owner/repo"
-    - **branch**: Branch to review (default: "main")
-    """
-    try:
-        if not getattr(app.state, "azure_openai_available", False):
-            raise HTTPException(
-                status_code=503,
-                detail=f"Azure OpenAI unavailable: {app.state.azure_openai_health_message}"
-            )
 
-        from integrations.github_integration import GitHubIntegration
-        github_integration = GitHubIntegration()
-
-        repo_full_name = request.get("repo_full_name")
-        branch = request.get("branch", "main")
-
-        if not repo_full_name:
-            raise HTTPException(status_code=400, detail="repo_full_name is required")
-
-        logger.info(f"Starting repository review for {repo_full_name}:{branch}")
-        result = await github_integration.review_entire_repository(repo_full_name, branch)
-
-        if "error" in result:
-            raise HTTPException(status_code=500, detail=result["error"])
-
-        logger.info(f"Repository review completed for {repo_full_name}")
-        return result
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error in repository review: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/webhook/bitbucket")
 async def bitbucket_webhook(
@@ -279,3 +240,54 @@ async def bitbucket_webhook(
     )
 
     return {"status": "accepted"}
+
+
+@app.post("/bitbucket/approval/{workspace}/{repo_slug}/{pr_id}")
+async def get_approval_status(
+    workspace: str,
+    repo_slug: str,
+    pr_id: int,
+    body: Optional[dict] = None
+):
+    """
+    Get approval and merge status for a Bitbucket PR.
+    
+    Approval is only allowed when:
+    1. Analysis is complete
+    2. No critical security issues exist
+    3. Destination branch is 'master' or 'sit'
+    
+    Returns {can_approve, can_merge, allowed_destinations, reason}
+    """
+    try:
+        if not getattr(app.state, "azure_openai_available", False):
+            raise HTTPException(
+                status_code=503,
+                detail=f"Azure OpenAI unavailable: {app.state.azure_openai_health_message}"
+            )
+
+        request_body = body or {}
+        analysis_complete = request_body.get("analysis_complete", False)
+        has_critical_issues = request_body.get("has_critical_issues", False)
+        destination_branch = request_body.get("destination_branch", "master")
+
+        logger.info(
+            f"Approval check for {workspace}/{repo_slug}#{pr_id} "
+            f"(analysis_complete={analysis_complete}, has_critical={has_critical_issues}, dest_branch={destination_branch})"
+        )
+
+        # Get approval status from Kafka handler
+        approval_status = kafka_handler.get_approval_status(
+            pr_destination_branch=destination_branch,
+            analysis_complete=analysis_complete,
+            has_critical_issues=has_critical_issues
+        )
+
+        logger.info(f"Approval status for PR#{pr_id}: {approval_status}")
+        return approval_status
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking approval status for PR#{pr_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
