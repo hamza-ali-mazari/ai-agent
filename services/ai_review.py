@@ -290,7 +290,7 @@ METRICS CALCULATION:
 RESPONSE FORMAT:
 Return a JSON object with the following structure:
 {{
-  "summary": "Brief overall assessment of the file changes including security posture",
+  "summary": "ONE sentence assessment of this file's overall quality and main issues",
   "comments": [
     {{
       "category": "security",
@@ -299,9 +299,9 @@ Return a JSON object with the following structure:
       "description": "User input is directly concatenated into SQL query without parameterization",
       "location": {{"line_start": 15, "line_end": 18}},
       "suggestion": "Use parameterized queries or prepared statements to prevent SQL injection",
-      "inline_suggestion": "    cursor.execute(\"SELECT * FROM users WHERE id = %s\", (user_id,))",
-      "code_example": "```python\\nimport sqlite3\\n# Secure parameterized query\\ncursor.execute(\"SELECT * FROM users WHERE id = ?\", (user_id,))\\n```",
-      "minimal_test": "```python\\nimport unittest\\ndef test_sql_injection_prevention(self):\\n    # Test that malicious input doesn't execute\\n    result = query_user(\"1 OR 1=1\")\\n    self.assertEqual(len(result), 0)\\n```",
+      "inline_suggestion": "cursor.execute(\\"SELECT * FROM users WHERE id = %s\\", (user_id,))",
+      "code_example": "```python\\nimport sqlite3\\n# Secure parameterized query\\ncursor.execute(\\"SELECT * FROM users WHERE id = ?\\", (user_id,))\\n```",
+      "minimal_test": "```python\\ntest_result = query_user(\\"1 OR 1=1\\")\\nassert len(test_result) == 0\\n```",
       "references": ["OWASP SQL Injection Prevention Cheat Sheet", "CWE-89"]
     }}
   ],
@@ -315,9 +315,23 @@ Return a JSON object with the following structure:
   }}
 }}
 
-IMPORTANT: For INLINE_SUGGESTION, provide the exact replacement code that should replace the problematic lines. This should be ready to apply as a direct code suggestion in the PR interface. Include proper indentation matching the original code and follow {language} conventions.
+INLINE_SUGGESTION REQUIREMENTS:
+- Provide ONLY the corrected line(s) of code
+- DO NOT include diff markers (-, +, @@ etc.)
+- DO NOT include unnecessary context
+- Match original indentation exactly
+- Make it ready to apply directly as a code suggestion
+- Include ALL required changes on one or multiple lines
+- For multi-line fixes, include each line without markers
 
-Be thorough but concise. Focus on real issues and improvements specific to {language}. Prioritize security vulnerabilities as they pose the highest risk."""
+IMPORTANT NOTES:
+- Be thorough but concise - one sentence summaries only
+- Focus ONLY on real issues specific to {language}
+- Prioritize SECURITY vulnerabilities (highest risk first)
+- Avoid duplicate issues across separate comments
+- Provide different fixes for different problems
+- Make suggestions language-specific and immediately applicable
+"""
 
         return prompt
 
@@ -379,7 +393,7 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
             }
 
     def _create_review_comment(self, comment_data: Dict[str, Any], file_path: str) -> ReviewComment:
-        """Create a ReviewComment from AI response data."""
+        """Create a ReviewComment from AI response data with improved formatting."""
         try:
             location = None
             if 'location' in comment_data and comment_data['location']:
@@ -408,6 +422,17 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
                     column_end=to_int_or_none(loc_data.get('column_end'))
                 )
 
+            # Format inline suggestion with proper diff markers
+            inline_suggestion = comment_data.get('inline_suggestion')
+            if inline_suggestion and not inline_suggestion.startswith(('-', '+')):
+                # Add diff markers for clarity if not already present
+                lines = inline_suggestion.split('\n')
+                formatted_lines = []
+                for line in lines:
+                    if line.strip():
+                        formatted_lines.append(f"+ {line}") if not line.startswith('-') else formatted_lines.append(f"- {line}")
+                inline_suggestion = '\n'.join(formatted_lines)
+
             return ReviewComment(
                 id=f"{file_path}_{hash(str(comment_data))}",
                 category=ReviewCategory(comment_data.get('category', 'best_practices')),
@@ -416,7 +441,7 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
                 description=comment_data.get('description', ''),
                 location=location,
                 suggestion=comment_data.get('suggestion'),
-                inline_suggestion=comment_data.get('inline_suggestion'),
+                inline_suggestion=inline_suggestion,
                 code_example=comment_data.get('code_example'),
                 minimal_test=comment_data.get('minimal_test'),
                 references=comment_data.get('references', []),
@@ -435,7 +460,7 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
 
     def review_code(self, request: CodeReviewRequest) -> CodeReviewResponse:
         """
-        Perform comprehensive AI-powered code review.
+        Perform comprehensive AI-powered code review with consolidated security analysis.
 
         Args:
             request: CodeReviewRequest containing diff and metadata
@@ -485,10 +510,15 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
                 metrics['security_score'] = security_score
                 metrics['vulnerability_count'] = vuln_count
 
+            # Keep summary but make it concise (not repetitive)
+            file_summary = ai_response.get('summary', '')
+            if len(file_summary) > 150:
+                file_summary = file_summary[:150] + '...'
+
             file_review = FileReview(
                 file_path=file_info['path'],
                 language=file_info.get('language'),
-                summary=ai_response.get('summary', 'No summary provided'),
+                summary=file_summary,
                 comments=comments,
                 metrics=metrics
             )
@@ -537,8 +567,11 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
             analysis_errors=analysis_errors
         )
 
-        # Generate overall feedback
-        overall_feedback = self._generate_overall_feedback(summary, file_reviews)
+        # Generate consolidated security analysis (one-time for all changes)
+        security_analysis = self._generate_consolidated_security_analysis(all_comments)
+
+        # Generate overall feedback (non-repetitive)
+        overall_feedback = self._generate_overall_feedback(summary, file_reviews, security_analysis)
 
         # Generate recommendations
         recommendations = self._generate_recommendations(summary, file_reviews)
@@ -554,7 +587,8 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
                 'branch': request.branch,
                 'commit_sha': request.commit_sha,
                 'author': request.author,
-                'analyzed_at': datetime.now().isoformat()
+                'analyzed_at': datetime.now().isoformat(),
+                'security_analysis': security_analysis
             }
         )
 
@@ -563,56 +597,119 @@ Be thorough but concise. Focus on real issues and improvements specific to {lang
 
         return response
 
-    def _generate_overall_feedback(self, summary: ReviewSummary, files: List[FileReview]) -> str:
-        """Generate overall feedback based on review results."""
-        score = summary.overall_score
+    def _generate_consolidated_security_analysis(self, all_comments: List[ReviewComment]) -> Dict[str, Any]:
+        """Generate unified security analysis across all files."""
+        security_comments = [c for c in all_comments if c.category.value == 'security']
+        
+        if not security_comments:
+            return {
+                "overall_security_posture": "No security vulnerabilities detected",
+                "critical_vulnerabilities": 0,
+                "high_vulnerabilities": 0,
+                "patterns": [],
+                "recommendations": []
+            }
+        
+        # Categorize by severity
+        critical = [c for c in security_comments if c.severity.value == 'critical']
+        high = [c for c in security_comments if c.severity.value == 'high']
+        
+        # Identify patterns
+        patterns = []
+        categories_found = {}
+        for comment in security_comments:
+            title_lower = comment.title.lower()
+            for pattern in ['injection', 'xss', 'authentication', 'authorization', 'hardcoded', 'validation', 'encryption']:
+                if pattern in title_lower:
+                    categories_found[pattern] = categories_found.get(pattern, 0) + 1
+        
+        if categories_found:
+            patterns = [f"{cat.title()}: {count} issue(s)" for cat, count in sorted(categories_found.items(), key=lambda x: x[1], reverse=True)]
+        
+        # Generate posture
+        total_sec_issues = len(security_comments)
+        if total_sec_issues == 0:
+            posture = "Secure - No vulnerabilities found"
+        elif len(critical) > 0:
+            posture = f"🚨 Critical - {len(critical)} critical vulnerability/vulnerabilities found"
+        elif len(high) > 0:
+            posture = f"⚠️ High Risk - {len(high)} high-severity issue(s) found"
+        else:
+            posture = "⚡ Medium Risk - Multiple lower-severity security issues"
+        
+        return {
+            "overall_security_posture": posture,
+            "critical_vulnerabilities": len(critical),
+            "high_vulnerabilities": len(high),
+            "total_security_issues": total_sec_issues,
+            "patterns": patterns,
+            "recommendations": [
+                "Apply security fixes in order of severity (Critical → High → Medium)",
+                "Review security best practices for the patterns identified",
+                "Consider adding security tests for validation"
+            ] if total_sec_issues > 0 else []
+        }
 
+    def _generate_overall_feedback(self, summary: ReviewSummary, files: List[FileReview], security_analysis: Dict[str, Any]) -> str:
+        """Generate concise, non-repetitive overall feedback."""
         if summary.analysis_errors > 0:
             return (
-                "AI analysis failed for one or more files. "
+                "⚠️ Analysis incomplete: AI analysis failed for one or more files. "
                 "Please verify your OpenAI credentials and retry the review."
             )
 
+        score = summary.overall_score
+        
+        # Score-based message (single, not repetitive)
         if score >= 90:
-            feedback = "Excellent work! The code changes are of high quality with minimal issues."
+            main_feedback = "✅ Excellent - High-quality changes with minimal issues"
         elif score >= 80:
-            feedback = "Good job! The code changes are solid with some minor improvements needed."
+            main_feedback = "👍 Good - Solid changes with some minor improvements needed"
         elif score >= 70:
-            feedback = "Decent work, but there are several areas that need attention."
+            main_feedback = "🔍 Review needed - Several areas require attention"
         elif score >= 60:
-            feedback = "The code changes have significant issues that should be addressed."
+            main_feedback = "⚠️ Issues found - Significant items need addressing before merge"
         else:
-            feedback = "The code changes require substantial improvements before merging."
+            main_feedback = "🛑 Major issues - Substantial improvements required"
 
-        critical_high = summary.critical_issues + summary.high_issues
-        if critical_high > 0:
-            feedback += f" There are {critical_high} critical/high priority issues that must be fixed."
+        # Add count summary (not duplicate)
+        details = f"Score: {score}/100. Found {summary.total_comments} issues: "
+        details += f"{summary.critical_issues} critical, {summary.high_issues} high, {summary.medium_issues} medium"
+        
+        # Add security posture if relevant
+        if security_analysis and 'overall_security_posture' in security_analysis:
+            details += f". Security: {security_analysis['overall_security_posture']}"
 
-        return feedback
+        return f"{main_feedback}. {details}"
 
     def _generate_recommendations(self, summary: ReviewSummary, files: List[FileReview]) -> List[str]:
-        """Generate actionable recommendations."""
+        """Generate actionable, non-repetitive recommendations."""
         recommendations = []
 
+        # Critical/High priority
         if summary.critical_issues > 0:
-            recommendations.append("Fix all critical issues before merging")
-
+            recommendations.append("🛑 Fix all critical issues before merging")
+        
         if summary.high_issues > 0:
-            recommendations.append("Address high-priority issues")
+            recommendations.append("⚠️ Address high-priority issues to reduce risk")
 
+        # Medium issues
         if summary.medium_issues > 3:
-            recommendations.append("Consider breaking down the changes into smaller PRs")
-
-        # Language-specific recommendations
-        languages = set(f.language for f in files if f.language != 'unknown')
-        for lang in languages:
-            if lang == 'python':
-                recommendations.append("Ensure Python code follows PEP 8 style guidelines")
-            elif lang in ['javascript', 'typescript']:
-                recommendations.append("Consider adding TypeScript types for better type safety")
-
+            recommendations.append("💡 Consider breaking down changes into smaller, focused PRs")
+        
+        # Size check
         if summary.total_comments > 20:
-            recommendations.append("The PR is quite large - consider splitting into multiple focused changes")
+            recommendations.append("📦 Large PR detected - split into multiple focused changes for easier review")
+
+        # Security recommendations
+        security_issues = sum(1 for _ in [file.comments for file in files] for comment in _ 
+                            if comment.category.value == 'security')
+        if security_issues > 0:
+            recommendations.append("🔒 Apply security fixes in order of severity")
+
+        # Overall quality
+        if summary.overall_score < 70:
+            recommendations.append("📋 Schedule a follow-up review after addressing feedback")
 
         return recommendations
 
