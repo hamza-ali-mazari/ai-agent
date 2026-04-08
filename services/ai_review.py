@@ -617,7 +617,7 @@ IMPORTANT NOTES:
         return response
 
     def _generate_consolidated_security_analysis(self, all_comments: List[ReviewComment]) -> Dict[str, Any]:
-        """Generate rich, unified security analysis across all files."""
+        """Generate rich, comprehensive security analysis with line-specific details and actionable insights."""
         security_comments = [c for c in all_comments if c.category.value == 'security']
 
         if not security_comments:
@@ -628,7 +628,11 @@ IMPORTANT NOTES:
                 "patterns": [],
                 "recommendations": [],
                 "risk_level": "Low",
-                "summary": "✅ All security checks passed"
+                "summary": "✅ All security checks passed",
+                "severity_breakdown": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+                "file_locations": [],
+                "critical_findings": [],
+                "high_findings": []
             }
 
         # Categorize by severity
@@ -636,17 +640,19 @@ IMPORTANT NOTES:
         high = [c for c in security_comments if c.severity.value == 'high']
         medium = [c for c in security_comments if c.severity.value == 'medium']
 
-        # Identify patterns with better categorization
+        # Enhanced vulnerability pattern detection
         patterns = []
         categories_found = {}
         vulnerability_types = {
-            'injection': ['sql injection', 'command injection', 'code injection'],
-            'xss': ['cross-site scripting', 'xss'],
-            'authentication': ['auth', 'login', 'password', 'credential'],
-            'authorization': ['access control', 'permission', 'role'],
-            'hardcoded': ['hardcoded', 'secret', 'key', 'token', 'password'],
-            'validation': ['input validation', 'sanitization', 'filtering'],
-            'encryption': ['encryption', 'crypto', 'hash', 'cipher']
+            'injection': ['sql injection', 'command injection', 'code injection', 'ldap injection'],
+            'xss': ['cross-site scripting', 'xss', 'script injection'],
+            'authentication': ['auth', 'login', 'password', 'credential', 'session'],
+            'authorization': ['access control', 'permission', 'role', 'privilege escalation'],
+            'hardcoded': ['hardcoded', 'secret', 'key', 'token', 'password', 'api key'],
+            'validation': ['input validation', 'sanitization', 'filtering', 'trust boundary'],
+            'encryption': ['encryption', 'crypto', 'hash', 'cipher', 'plaintext'],
+            'configuration': ['config', 'misconfiguration', 'default credentials'],
+            'data_leakage': ['information disclosure', 'sensitive data', 'privacy']
         }
 
         for comment in security_comments:
@@ -660,36 +666,81 @@ IMPORTANT NOTES:
         if categories_found:
             patterns = [f"**{cat.title()}:** {count} issue(s)" for cat, count in sorted(categories_found.items(), key=lambda x: x[1], reverse=True)]
 
-        # Generate rich posture with risk assessment
+        # Generate file locations with line numbers
+        file_locations = []
+        for comment in security_comments:
+            if comment.location:
+                location_info = {
+                    "file": comment.location.file_path,
+                    "line": comment.location.line_start or "N/A",
+                    "severity": comment.severity.value,
+                    "title": comment.title,
+                    "rule_id": comment.rule_id or "N/A"
+                }
+                file_locations.append(location_info)
+
+        # Critical and high findings with details
+        critical_findings = []
+        high_findings = []
+
+        for comment in critical:
+            finding = {
+                "title": comment.title,
+                "file": comment.location.file_path if comment.location else "Unknown",
+                "line": comment.location.line_start if comment.location else "N/A",
+                "description": comment.description,
+                "suggestion": comment.suggestion,
+                "rule_id": comment.rule_id or "N/A",
+                "impact": comment.impact or "High security risk"
+            }
+            critical_findings.append(finding)
+
+        for comment in high:
+            finding = {
+                "title": comment.title,
+                "file": comment.location.file_path if comment.location else "Unknown",
+                "line": comment.location.line_start if comment.location else "N/A",
+                "description": comment.description,
+                "suggestion": comment.suggestion,
+                "rule_id": comment.rule_id or "N/A",
+                "impact": comment.impact or "Security vulnerability"
+            }
+            high_findings.append(finding)
+
+        # Enhanced risk assessment with better summaries
         total_sec_issues = len(security_comments)
         if len(critical) > 0:
             posture = f"🚨 **CRITICAL RISK** - {len(critical)} critical vulnerability/vulnerabilities found"
             risk_level = "Critical"
-            summary = f"🔴 Immediate action required - {len(critical)} critical security issues must be fixed before merge"
+            summary = f"🔴 **BLOCKING:** {len(critical)} critical security issues must be fixed before merge. These pose immediate threats to application security."
         elif len(high) > 0:
             posture = f"⚠️ **HIGH RISK** - {len(high)} high-severity issue(s) found"
             risk_level = "High"
-            summary = f"🟠 Security vulnerabilities detected - address before deployment"
+            summary = f"🟠 **REQUIRES ATTENTION:** {len(high)} high-risk security vulnerabilities detected. Address before deployment to production."
         elif len(medium) > 0:
             posture = f"🟡 **MEDIUM RISK** - {len(medium)} security concerns identified"
             risk_level = "Medium"
-            summary = f"🟡 Security improvements recommended"
+            summary = f"🟡 **IMPROVEMENT NEEDED:** {len(medium)} security issues found. Consider fixing before release for better security posture."
         else:
             posture = f"🛡️ **SECURE** - No significant security issues found"
             risk_level = "Low"
-            summary = f"✅ Security checks passed"
+            summary = f"✅ **SECURE:** All security checks passed. Code follows security best practices."
 
-        # Enhanced recommendations
+        # Enhanced, actionable recommendations
         recommendations = []
         if total_sec_issues > 0:
             if len(critical) > 0:
-                recommendations.append("🚨 **URGENT:** Fix all critical vulnerabilities immediately")
+                recommendations.append("🚨 **URGENT:** Fix all critical vulnerabilities immediately - these are blocking deployment")
+                recommendations.append("🔧 **ACTION:** Review critical findings above and implement suggested fixes")
             if len(high) > 0:
-                recommendations.append("⚠️ **HIGH PRIORITY:** Address high-severity security issues")
+                recommendations.append("⚠️ **HIGH PRIORITY:** Address high-severity security issues before production deployment")
+                recommendations.append("🔍 **REVIEW:** Examine high-risk findings and apply security patches")
             if patterns:
-                recommendations.append(f"🔍 **PATTERNS:** Review {', '.join([p.split(':')[0].replace('**', '') for p in patterns[:3]])} vulnerabilities")
-            recommendations.append("🧪 **TESTING:** Add security tests to prevent regression")
-            recommendations.append("📚 **TRAINING:** Consider security training for development team")
+                top_patterns = [p.split(':')[0].replace('**', '') for p in patterns[:3]]
+                recommendations.append(f"🎯 **FOCUS AREAS:** Prioritize fixing {', '.join(top_patterns)} vulnerabilities")
+            recommendations.append("🧪 **TESTING:** Add security unit tests and integration tests for vulnerable code paths")
+            recommendations.append("📚 **TRAINING:** Consider security awareness training for development team")
+            recommendations.append("🔒 **TOOLS:** Implement SAST/SCA tools in CI/CD pipeline for ongoing security")
 
         return {
             "overall_security_posture": posture,
@@ -706,7 +757,10 @@ IMPORTANT NOTES:
                 "high": len(high),
                 "medium": len(medium),
                 "low": len([c for c in security_comments if c.severity.value == 'low'])
-            }
+            },
+            "file_locations": file_locations,
+            "critical_findings": critical_findings,
+            "high_findings": high_findings
         }
 
     def _generate_overall_feedback(self, summary: ReviewSummary, files: List[FileReview], security_analysis: Dict[str, Any]) -> str:
@@ -760,7 +814,7 @@ IMPORTANT NOTES:
         if issues:
             feedback_parts.append(f"**Issues Found:** {' | '.join(issues)}")
 
-        # Enhanced Security Analysis Section
+        # Enhanced Security Analysis Section with Line-Specific Details
         security_posture = security_analysis.get('overall_security_posture', 'Unknown')
         risk_level = security_analysis.get('risk_level', 'Unknown')
         total_sec_issues = security_analysis.get('total_security_issues', 0)
@@ -786,6 +840,42 @@ IMPORTANT NOTES:
             patterns = security_analysis.get('patterns', [])
             if patterns:
                 feedback_parts.append(f"**Vulnerability Patterns:** {', '.join(patterns[:3])}")
+
+            # Critical Findings with Line Numbers and Suggestions
+            critical_findings = security_analysis.get('critical_findings', [])
+            if critical_findings:
+                feedback_parts.append("")
+                feedback_parts.append("### 🚨 Critical Security Issues (Must Fix)")
+                for i, finding in enumerate(critical_findings[:5], 1):  # Show top 5
+                    feedback_parts.append(f"**{i}. {finding['title']}**")
+                    feedback_parts.append(f"   📁 **File:** `{finding['file']}` **Line:** {finding['line']}")
+                    feedback_parts.append(f"   📋 **Issue:** {finding['description']}")
+                    if finding['suggestion']:
+                        feedback_parts.append(f"   ✅ **Fix:** {finding['suggestion']}")
+                    feedback_parts.append(f"   🎯 **Impact:** {finding['impact']}")
+                    feedback_parts.append("")
+
+            # High Findings with Line Numbers and Suggestions
+            high_findings = security_analysis.get('high_findings', [])
+            if high_findings:
+                feedback_parts.append("")
+                feedback_parts.append("### ⚠️ High Priority Security Issues")
+                for i, finding in enumerate(high_findings[:5], 1):  # Show top 5
+                    feedback_parts.append(f"**{i}. {finding['title']}**")
+                    feedback_parts.append(f"   📁 **File:** `{finding['file']}` **Line:** {finding['line']}")
+                    feedback_parts.append(f"   📋 **Issue:** {finding['description']}")
+                    if finding['suggestion']:
+                        feedback_parts.append(f"   ✅ **Fix:** {finding['suggestion']}")
+                    feedback_parts.append(f"   🎯 **Impact:** {finding['impact']}")
+                    feedback_parts.append("")
+
+            # Security Recommendations
+            security_recommendations = security_analysis.get('recommendations', [])
+            if security_recommendations:
+                feedback_parts.append("")
+                feedback_parts.append("### 🛡️ Security Recommendations")
+                for rec in security_recommendations[:5]:  # Show top 5 recommendations
+                    feedback_parts.append(f"• {rec}")
         else:
             feedback_parts.append(f"**Security:** 🛡️ {security_posture}")
 
