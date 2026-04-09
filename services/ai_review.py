@@ -350,7 +350,6 @@ IMPORTANT NOTES:
 - Provide different fixes for different problems
 - Make suggestions language-specific and immediately applicable
 - Include both original code and suggested changes for clear before/after comparison"""
-"""
 
         return prompt
 
