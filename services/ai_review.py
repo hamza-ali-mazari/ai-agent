@@ -301,7 +301,7 @@ Return a JSON object with the following structure:
       "title": "SQL Injection Vulnerability",
       "description": "User input is directly concatenated into SQL query without parameterization",
       "location": {{"line_start": 15, "line_end": 18}},
-      "original_code": "query = f'SELECT * FROM users WHERE id = {user_id}'",
+      "original_code": "query = f'SELECT * FROM users WHERE id = {{user_id}}'",
       "suggestion": "Use parameterized queries or prepared statements to prevent SQL injection",
       "inline_suggestion": "cursor.execute(\\"SELECT * FROM users WHERE id = %s\\", (user_id,))",
       "code_example": "```python\\nimport sqlite3\\n# Secure parameterized query\\ncursor.execute(\\"SELECT * FROM users WHERE id = ?\\", (user_id,))\\n```",
