@@ -37,6 +37,7 @@ class ReviewComment(BaseModel):
     title: str
     description: str
     location: Optional[CodeLocation] = None
+    original_code: Optional[str] = None  # Original problematic code from the diff
     suggestion: Optional[str] = None
     inline_suggestion: Optional[str] = None  # Exact replacement code for PR suggestions
     code_example: Optional[str] = None
@@ -89,7 +90,7 @@ index 1234567..abcdef0 100644
  def goodbye():
 -    print('Goodbye')
 +    print('Goodbye World')""",
-                "repository_url": "https://github.com/user/repo",
+                "repository_url": "https://bitbucket.org/workspace/repo",
                 "branch": "feature/new-feature",
                 "commit_sha": "abcdef0123456789",
                 "author": "developer@example.com",

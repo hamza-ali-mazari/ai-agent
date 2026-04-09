@@ -7,7 +7,7 @@ python-multipart>=0.0.6
 aiofiles>=0.23.0
 pytest>=7.0.0
 httpx>=0.24.0  # For testing FastAPI
-requests>=2.31.0  # For API calls to GitHub/Bitbucket
+requests>=2.31.0  # For Bitbucket API calls
 
 # Security & Cryptography (OWASP Top 10 2021)
 bcrypt>=4.0.0  # Secure password hashing - A02 Cryptographic Failures

@@ -470,6 +470,12 @@ class BitbucketIntegration:
             body_parts.append("")
             body_parts.append(f"**Suggestion:** {comment['suggestion']}")
 
+        # Original code (if available)
+        if comment.get('original_code'):
+            body_parts.append("")
+            body_parts.append("**Original code:**")
+            body_parts.append(f"```diff\n{comment['original_code']}\n```")
+
         # Inline suggestion (diff format)
         if comment.get('inline_suggestion'):
             body_parts.append("")

@@ -254,11 +254,12 @@ For each issue found, provide:
 3. TITLE: Brief, descriptive title (e.g., "Missing Import Statements", "SQL Injection Risk")
 4. DESCRIPTION: Detailed explanation of the issue, considering {language} best practices and security implications
 5. LOCATION: Line numbers if applicable (be precise about which lines the issue affects)
-6. SUGGESTION: Clear, actionable suggestion for how to fix it, appropriate for {language}
-7. INLINE_SUGGESTION: The exact replacement code that should replace the problematic lines. This should be the corrected version of the code that can be applied directly as a suggestion in the PR. Include proper indentation and formatting for {language}.
-8. CODE_EXAMPLE: Additional code example showing the fix in context (use only if the inline suggestion needs more context)
-9. MINIMAL_TEST: A minimal unit test or security test that validates the fix
-10. REFERENCES: Security standards, OWASP guidelines, or best practices that apply
+6. ORIGINAL_CODE: The exact problematic code from the diff that needs to be replaced
+7. SUGGESTION: Clear, actionable suggestion for how to fix it, appropriate for {language}
+8. INLINE_SUGGESTION: The exact replacement code that should replace the problematic lines. This should be the corrected version of the code that can be applied directly as a suggestion in the PR. Include proper indentation and formatting for {language}.
+9. CODE_EXAMPLE: Additional code example showing the fix in context (use only if the inline suggestion needs more context)
+10. MINIMAL_TEST: A minimal unit test or security test that validates the fix
+11. REFERENCES: Security standards, OWASP guidelines, or best practices that apply
 
 CODE CHANGES:
 ```diff
@@ -300,6 +301,7 @@ Return a JSON object with the following structure:
       "title": "SQL Injection Vulnerability",
       "description": "User input is directly concatenated into SQL query without parameterization",
       "location": {{"line_start": 15, "line_end": 18}},
+      "original_code": "query = f'SELECT * FROM users WHERE id = {user_id}'",
       "suggestion": "Use parameterized queries or prepared statements to prevent SQL injection",
       "inline_suggestion": "cursor.execute(\\"SELECT * FROM users WHERE id = %s\\", (user_id,))",
       "code_example": "```python\\nimport sqlite3\\n# Secure parameterized query\\ncursor.execute(\\"SELECT * FROM users WHERE id = ?\\", (user_id,))\\n```",
@@ -326,6 +328,20 @@ INLINE_SUGGESTION REQUIREMENTS:
 - Include ALL required changes on one or multiple lines
 - For multi-line fixes, include each line without markers
 
+ORIGINAL_CODE REQUIREMENTS:
+- Provide the original problematic code that needs to be replaced
+- Include the exact lines from the diff that contain the issue
+- DO NOT include diff markers (-, +, @@ etc.)
+- Match original indentation exactly
+- Show only the relevant lines that need to be changed
+
+BITBUCKET INTEGRATION NOTES:
+- Focus on Bitbucket-specific features and workflows
+- Provide inline suggestions that can be directly applied in Bitbucket PRs
+- Include line-specific feedback for better code review experience
+- Support both Bitbucket Cloud and Server environments
+- Generate comments that integrate well with Bitbucket's review interface
+
 IMPORTANT NOTES:
 - Be thorough but concise - one sentence summaries only
 - Focus ONLY on real issues specific to {language}
@@ -333,6 +349,7 @@ IMPORTANT NOTES:
 - Avoid duplicate issues across separate comments
 - Provide different fixes for different problems
 - Make suggestions language-specific and immediately applicable
+- Include both original code and suggested changes for clear before/after comparison"""
 """
 
         return prompt
@@ -394,10 +411,75 @@ IMPORTANT NOTES:
                 }
             }
 
-    def _create_review_comment(self, comment_data: Dict[str, Any], file_path: str) -> ReviewComment:
+    def _extract_original_code_from_diff(self, diff_content: str, file_path: str, line_start: int, line_end: Optional[int] = None) -> Optional[str]:
+        """
+        Extract original code from diff content based on line numbers.
+        
+        Args:
+            diff_content: The full git diff content
+            file_path: Path to the file in the diff
+            line_start: Starting line number
+            line_end: Ending line number (optional)
+            
+        Returns:
+            Original code lines as string, or None if not found
+        """
+        try:
+            lines = diff_content.split('\n')
+            current_file = None
+            current_line_num = 0
+            original_lines = []
+            
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+                
+                # Find the file we're looking for
+                if line.startswith('diff --git'):
+                    # Extract file path from diff line
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        diff_file_path = parts[2][2:]  # Remove 'b/'
+                        if diff_file_path == file_path:
+                            current_file = diff_file_path
+                            current_line_num = 0
+                        else:
+                            current_file = None
+                
+                elif current_file and line.startswith('@@'):
+                    # Parse hunk header like @@ -10,5 +10,5 @@
+                    import re
+                    match = re.match(r'@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@', line)
+                    if match:
+                        old_start = int(match.group(1))
+                        current_line_num = old_start
+                
+                elif current_file and (line.startswith('-') or line.startswith(' ')):
+                    # This is an original line (either removed or context)
+                    if current_line_num >= line_start:
+                        if line_end is None or current_line_num <= line_end:
+                            # Remove the diff marker and add the line
+                            original_lines.append(line[1:] if line.startswith(('-', ' ')) else line)
+                        elif current_line_num > line_end:
+                            break
+                    
+                    if line.startswith(('-', ' ')):
+                        current_line_num += 1
+                
+                i += 1
+            
+            return '\n'.join(original_lines).strip() if original_lines else None
+            
+        except Exception as e:
+            logger.warning(f"Failed to extract original code from diff: {e}")
+            return None
+
+    def _create_review_comment(self, comment_data: Dict[str, Any], file_path: str, diff_content: str = None) -> ReviewComment:
         """Create a ReviewComment from AI response data with improved formatting."""
         try:
             location = None
+            original_code = comment_data.get('original_code')  # AI-provided original code
+
             if 'location' in comment_data and comment_data['location']:
                 loc_data = comment_data['location']
                 
@@ -424,6 +506,12 @@ IMPORTANT NOTES:
                     column_end=to_int_or_none(loc_data.get('column_end'))
                 )
 
+                # Extract original code from diff if not provided by AI
+                if not original_code and diff_content and location.line_start:
+                    original_code = self._extract_original_code_from_diff(
+                        diff_content, file_path, location.line_start, location.line_end
+                    )
+
             # Format inline suggestion with proper diff markers
             inline_suggestion = comment_data.get('inline_suggestion')
             if inline_suggestion and not inline_suggestion.startswith(('-', '+')):
@@ -442,6 +530,7 @@ IMPORTANT NOTES:
                 title=comment_data.get('title', 'Code Review Comment'),
                 description=comment_data.get('description', ''),
                 location=location,
+                original_code=original_code,
                 suggestion=comment_data.get('suggestion'),
                 inline_suggestion=inline_suggestion,
                 code_example=comment_data.get('code_example'),
@@ -494,7 +583,7 @@ IMPORTANT NOTES:
             # Parse AI response
             comments_data = ai_response.get('comments', [])
             comments = [
-                self._create_review_comment(comment, file_info['path'])
+                self._create_review_comment(comment, file_info['path'], request.diff)
                 for comment in comments_data
             ]
 

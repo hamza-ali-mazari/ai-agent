@@ -93,7 +93,7 @@ index 1234567..abcdef0 100644
  def goodbye():
 -    print('Goodbye')
 +    print('Goodbye World')""",
-                "repository_url": "https://github.com/user/repo",
+                "repository_url": "https://bitbucket.org/workspace/repo",
                 "branch": "feature/new-feature",
                 "commit_sha": "abcdef0123456789",
                 "author": "developer@example.com",
