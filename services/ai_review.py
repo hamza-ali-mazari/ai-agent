@@ -897,7 +897,7 @@ IMPORTANT NOTES:
         }
 
     def _generate_overall_feedback(self, summary: ReviewSummary, files: List[FileReview], security_analysis: Dict[str, Any]) -> str:
-        """Generate rich, comprehensive overall feedback with visual indicators and detailed analysis."""
+        """Generate detailed analysis feedback without repeating summary info (which is already in structured summary object)."""
         if summary.analysis_errors > 0:
             return (
                 "## ⚠️ Analysis Incomplete\n\n"
@@ -906,68 +906,18 @@ IMPORTANT NOTES:
                 "---"
             )
 
-        # Score indicator with emoji
-        score = summary.overall_score
-        if score >= 90:
-            score_emoji = "🎉"
-            score_desc = "Excellent"
-        elif score >= 80:
-            score_emoji = "✅"
-            score_desc = "Good"
-        elif score >= 70:
-            score_emoji = "⚠️"
-            score_desc = "Needs Attention"
-        elif score >= 60:
-            score_emoji = "🟡"
-            score_desc = "Significant Issues"
-        else:
-            score_emoji = "🔴"
-            score_desc = "Critical Review Required"
-
-        # Build rich feedback
+        # Start with key insights (skip redundant score/issues - already in summary object)
         feedback_parts = []
+        feedback_parts.append("## 🔍 Detailed Analysis")
+        feedback_parts.append("")
 
-        # Main assessment header
-        feedback_parts.append(f"## {score_emoji} Code Review Summary")
-        feedback_parts.append(f"**Overall Score:** {score}/100 ({score_desc})")
-
-        # Issue breakdown with visual indicators
-        issues = []
-        if summary.critical_issues > 0:
-            issues.append(f"🔴 {summary.critical_issues} Critical")
-        if summary.high_issues > 0:
-            issues.append(f"🟠 {summary.high_issues} High")
-        if summary.medium_issues > 0:
-            issues.append(f"🟡 {summary.medium_issues} Medium")
-        if summary.low_issues > 0:
-            issues.append(f"🔵 {summary.low_issues} Low")
-        if summary.info_suggestions > 0:
-            issues.append(f"ℹ️ {summary.info_suggestions} Info")
-
-        if issues:
-            feedback_parts.append(f"**Issues Found:** {' | '.join(issues)}")
-
-        # Enhanced Security Analysis Section with Line-Specific Details
-        security_posture = security_analysis.get('overall_security_posture', 'Unknown')
-        risk_level = security_analysis.get('risk_level', 'Unknown')
+        # Enhanced Security Analysis Section (no repetition)
+        security_posture = security_analysis.get('overall_security_posture', '')
         total_sec_issues = security_analysis.get('total_security_issues', 0)
 
         if total_sec_issues > 0:
-            feedback_parts.append(f"**Security Risk:** {risk_level} ({total_sec_issues} issues)")
-            feedback_parts.append(f"**Security Status:** {security_posture}")
-
-            # Security breakdown if issues exist
-            severity_breakdown = security_analysis.get('severity_breakdown', {})
-            if severity_breakdown:
-                sec_details = []
-                if severity_breakdown.get('critical', 0) > 0:
-                    sec_details.append(f"🚨 {severity_breakdown['critical']} Critical")
-                if severity_breakdown.get('high', 0) > 0:
-                    sec_details.append(f"⚠️ {severity_breakdown['high']} High")
-                if severity_breakdown.get('medium', 0) > 0:
-                    sec_details.append(f"🟡 {severity_breakdown['medium']} Medium")
-                if sec_details:
-                    feedback_parts.append(f"**Security Breakdown:** {' | '.join(sec_details)}")
+            feedback_parts.append(f"### 🛡️ Security Assessment")
+            feedback_parts.append(f"{security_posture}")
 
             # Security patterns if available
             patterns = security_analysis.get('patterns', [])
@@ -978,44 +928,24 @@ IMPORTANT NOTES:
             critical_findings = security_analysis.get('critical_findings', [])
             if critical_findings:
                 feedback_parts.append("")
-                feedback_parts.append("### 🚨 Critical Security Issues (Must Fix)")
-                for i, finding in enumerate(critical_findings[:5], 1):  # Show top 5
-                    feedback_parts.append(f"**{i}. {finding['title']}**")
-                    feedback_parts.append(f"   📁 **File:** `{finding['file']}` **Line:** {finding['line']}")
-                    feedback_parts.append(f"   📋 **Issue:** {finding['description']}")
+                feedback_parts.append("**🚨 Critical Issues (Must Fix):**")
+                for i, finding in enumerate(critical_findings[:3], 1):
+                    feedback_parts.append(f"{i}. **{finding['title']}** - Line {finding['line']}")
                     if finding['suggestion']:
-                        feedback_parts.append(f"   ✅ **Fix:** {finding['suggestion']}")
-                    feedback_parts.append(f"   🎯 **Impact:** {finding['impact']}")
-                    feedback_parts.append("")
+                        feedback_parts.append(f"   → {finding['suggestion']}")
 
-            # High Findings with Line Numbers and Suggestions
+            # High Findings
             high_findings = security_analysis.get('high_findings', [])
             if high_findings:
                 feedback_parts.append("")
-                feedback_parts.append("### ⚠️ High Priority Security Issues")
-                for i, finding in enumerate(high_findings[:5], 1):  # Show top 5
-                    feedback_parts.append(f"**{i}. {finding['title']}**")
-                    feedback_parts.append(f"   📁 **File:** `{finding['file']}` **Line:** {finding['line']}")
-                    feedback_parts.append(f"   📋 **Issue:** {finding['description']}")
+                feedback_parts.append("**⚠️ High Priority Issues:**")
+                for i, finding in enumerate(high_findings[:3], 1):
+                    feedback_parts.append(f"{i}. **{finding['title']}** - Line {finding['line']}")
                     if finding['suggestion']:
-                        feedback_parts.append(f"   ✅ **Fix:** {finding['suggestion']}")
-                    feedback_parts.append(f"   🎯 **Impact:** {finding['impact']}")
-                    feedback_parts.append("")
-
-            # Security Recommendations
-            security_recommendations = security_analysis.get('recommendations', [])
-            if security_recommendations:
-                feedback_parts.append("")
-                feedback_parts.append("### 🛡️ Security Recommendations")
-                for rec in security_recommendations[:5]:  # Show top 5 recommendations
-                    feedback_parts.append(f"• {rec}")
+                        feedback_parts.append(f"   → {finding['suggestion']}")
         else:
-            feedback_parts.append(f"**Security:** 🛡️ {security_posture}")
-
-        # Files analyzed
-        total_files = len(files)
-        files_with_issues = sum(1 for f in files if f.comments)
-        feedback_parts.append(f"**Files Analyzed:** {total_files} ({files_with_issues} with issues)")
+            feedback_parts.append("### ✅ Security Status")
+            feedback_parts.append("No security vulnerabilities detected")
 
         # Enhanced Dependency Analysis Section
         dep_issues = []
@@ -1032,7 +962,8 @@ IMPORTANT NOTES:
                         dep_summary['total'] += 1
 
         if dep_summary['total'] > 0:
-            feedback_parts.append(f"**Dependencies:** ⚠️ {dep_summary['total']} issues found")
+            feedback_parts.append("")
+            feedback_parts.append(f"### ⚠️ Dependency Issues: {dep_summary['total']} found")
             dep_breakdown = []
             if dep_summary['critical'] > 0:
                 dep_breakdown.append(f"🚨 {dep_summary['critical']} Critical")
@@ -1041,24 +972,16 @@ IMPORTANT NOTES:
             if dep_summary['medium'] > 0:
                 dep_breakdown.append(f"🟡 {dep_summary['medium']} Medium")
             if dep_breakdown:
-                feedback_parts.append(f"**Dependency Issues:** {' | '.join(dep_breakdown)}")
-
-        # Add summary from security analysis
-        security_summary = security_analysis.get('summary', '')
-        if security_summary:
-            feedback_parts.append(f"**Summary:** {security_summary}")
+                feedback_parts.append(f"{' | '.join(dep_breakdown)}")
 
         feedback_parts.append("")
         feedback_parts.append("---")
-        
-        # Add token tracking and cost information
         feedback_parts.append("")
         feedback_parts.append("### 📊 Analysis Metrics")
         if summary.tokens_used:
             feedback_parts.append(f"🔹 **Tokens Used:** {summary.tokens_used:,}")
             feedback_parts.append(f"💰 **Estimated Cost:** {summary.estimated_cost}")
         feedback_parts.append(f"📁 **Files Analyzed:** {len(files)}")
-        feedback_parts.append(f"⏱️ **Total Issues:** {summary.total_comments}")
 
         # Join with proper formatting
         return "\n".join(feedback_parts)
