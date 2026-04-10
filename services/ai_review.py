@@ -255,7 +255,7 @@ For each issue found, provide:
 3. TITLE: Brief, descriptive title (e.g., "Missing Import Statements", "SQL Injection Risk")
 4. DESCRIPTION: Detailed explanation of the issue, considering {language} best practices and security implications
 5. LOCATION: Line numbers if applicable (be precise about which lines the issue affects)
-6. ORIGINAL_CODE: The exact problematic code from the diff that needs to be replaced
+6. CHANGED_LINES_DIFF: The exact diff showing the problematic lines that need to be changed
 7. SUGGESTION: Clear, actionable suggestion for how to fix it, appropriate for {language}
 8. INLINE_SUGGESTION: The exact replacement code that should replace the problematic lines. This should be the corrected version of the code that can be applied directly as a suggestion in the PR. Include proper indentation and formatting for {language}.
 9. CODE_EXAMPLE: Additional code example showing the fix in context (use only if the inline suggestion needs more context)
@@ -269,8 +269,9 @@ CODE CHANGES:
 
 LANGUAGE-SPECIFIC GUIDANCE:
 - For compiled languages (Java, C++, C#, Go, Rust): Focus on performance, memory management, type safety, secure coding practices
-- For interpreted languages (Python, JavaScript, PHP, Ruby): Focus on runtime errors, code clarity, maintainability, input validation, secure API usage
-- For web technologies (HTML, CSS, JavaScript): Focus on accessibility, browser compatibility, security (XSS, CSRF, secure headers)
+- For interpreted languages (Python, PHP, Ruby): Focus on runtime errors, code clarity, maintainability, input validation, secure API usage
+- For **JavaScript/TypeScript (web)**: Focus on async/await best practices, promise handling, null safety, DOM manipulation security, event handler leaks, memory management, type safety (TS), module dependencies, XSS prevention, CSRF tokens
+- For HTML/CSS: Focus on accessibility, semantic structure, browser compatibility, security (XSS, CSRF, secure headers)
 - For scripts (Shell, PowerShell): Focus on error handling, portability, security, input sanitization
 - For configuration files (JSON, YAML, XML): Focus on syntax correctness, structure, maintainability, secret exposure
 
@@ -302,7 +303,7 @@ Return a JSON object with the following structure:
       "title": "SQL Injection Vulnerability",
       "description": "User input is directly concatenated into SQL query without parameterization",
       "location": {{"line_start": 15, "line_end": 18}},
-      "original_code": "query = f'SELECT * FROM users WHERE id = {{user_id}}'",
+      "changed_lines_diff": "- query = f'SELECT * FROM users WHERE id = {{user_id}}'\n+ cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))",
       "suggestion": "Use parameterized queries or prepared statements to prevent SQL injection",
       "inline_suggestion": "cursor.execute(\\"SELECT * FROM users WHERE id = %s\\", (user_id,))",
       "code_example": "```python\\nimport sqlite3\\n# Secure parameterized query\\ncursor.execute(\\"SELECT * FROM users WHERE id = ?\\", (user_id,))\\n```",
@@ -329,10 +330,10 @@ INLINE_SUGGESTION REQUIREMENTS:
 - Include ALL required changes on one or multiple lines
 - For multi-line fixes, include each line without markers
 
-ORIGINAL_CODE REQUIREMENTS:
-- Provide the original problematic code that needs to be replaced
-- Include the exact lines from the diff that contain the issue
-- DO NOT include diff markers (-, +, @@ etc.)
+CHANGED_LINES_DIFF REQUIREMENTS:
+- Show the problematic lines from the diff that need to be replaced
+- Include the lines before and after for context
+- Use proper diff format (- for old, + for new)
 - Match original indentation exactly
 - Show only the relevant lines that need to be changed
 
@@ -541,7 +542,7 @@ IMPORTANT NOTES:
                 title=comment_data.get('title', 'Code Review Comment'),
                 description=comment_data.get('description', ''),
                 location=location,
-                original_code=original_code,
+                changed_lines_diff=comment_data.get('changed_lines_diff') or comment_data.get('original_code'),  # Handle both field names
                 suggestion=comment_data.get('suggestion'),
                 inline_suggestion=inline_suggestion,
                 code_example=comment_data.get('code_example'),
@@ -678,6 +679,15 @@ IMPORTANT NOTES:
         if analysis_errors > 0:
             overall_score = 0
 
+        # Calculate total tokens used
+        total_tokens_used = sum(
+            file_review.tokens_used.total_tokens if file_review.tokens_used else 0
+            for file_review in file_reviews
+        )
+        
+        # Estimate cost (GPT-4o pricing: ~$0.005 per 1K tokens)
+        estimated_cost = f"${(total_tokens_used * 0.000005):.4f}"
+
         summary = ReviewSummary(
             overall_score=overall_score,
             total_comments=len(all_comments),
@@ -687,7 +697,9 @@ IMPORTANT NOTES:
             low_issues=severity_counts['low'],
             info_suggestions=severity_counts['info'],
             categories_breakdown=category_counts,
-            analysis_errors=analysis_errors
+            analysis_errors=analysis_errors,
+            tokens_used=total_tokens_used,
+            estimated_cost=estimated_cost
         )
 
         # Generate consolidated security analysis (one-time for all changes)
@@ -1036,7 +1048,17 @@ IMPORTANT NOTES:
         if security_summary:
             feedback_parts.append(f"**Summary:** {security_summary}")
 
+        feedback_parts.append("")
         feedback_parts.append("---")
+        
+        # Add token tracking and cost information
+        feedback_parts.append("")
+        feedback_parts.append("### 📊 Analysis Metrics")
+        if summary.tokens_used:
+            feedback_parts.append(f"🔹 **Tokens Used:** {summary.tokens_used:,}")
+            feedback_parts.append(f"💰 **Estimated Cost:** {summary.estimated_cost}")
+        feedback_parts.append(f"📁 **Files Analyzed:** {len(files)}")
+        feedback_parts.append(f"⏱️ **Total Issues:** {summary.total_comments}")
 
         # Join with proper formatting
         return "\n".join(feedback_parts)

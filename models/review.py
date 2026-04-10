@@ -54,7 +54,7 @@ class ReviewComment(BaseModel):
     title: str
     description: str
     location: Optional[CodeLocation] = None
-    original_code: Optional[str] = None  # Original problematic code from the diff
+    changed_lines_diff: Optional[str] = None  # Diff showing the problematic lines that need fixing
     suggestion: Optional[str] = None
     inline_suggestion: Optional[str] = None  # Exact replacement code for PR suggestions
     code_example: Optional[str] = None
@@ -62,6 +62,12 @@ class ReviewComment(BaseModel):
     references: Optional[List[str]] = None
     rule_id: Optional[str] = None  # Security rule identifier (e.g., "OWASP-A01", "CWE-89")
     impact: Optional[str] = None  # Security/business impact description
+    
+    # For backward compatibility
+    @property
+    def original_code(self) -> Optional[str]:
+        """Backward compatibility property."""
+        return self.changed_lines_diff
 
 
 class FileReview(BaseModel):
@@ -83,7 +89,9 @@ class ReviewSummary(BaseModel):
     info_suggestions: int
     categories_breakdown: Dict[str, int]
     analysis_errors: int = 0
-
+    # Token tracking information
+    tokens_used: Optional[int] = None
+    estimated_cost: Optional[str] = None  # e.g., "$0.12"
 
 class CodeReviewRequest(BaseModel):
     diff: str
