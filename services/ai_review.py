@@ -16,7 +16,8 @@ from models.review import (
     ReviewCategory,
     ReviewSeverity,
     CodeLocation,
-    ReviewConfig
+    ReviewConfig,
+    TokenUsage
 )
 
 # Configure logging
@@ -353,8 +354,8 @@ IMPORTANT NOTES:
 
         return prompt
 
-    def _call_ai_model(self, prompt: str) -> Dict[str, Any]:
-        """Call Azure OpenAI with retry logic."""
+    def _call_ai_model(self, prompt: str) -> tuple[Dict[str, Any], TokenUsage]:
+        """Call Azure OpenAI with retry logic and return response + token usage."""
         try:
             logger.info("Sending request to Azure OpenAI")
             response = self.client.chat.completions.create(
@@ -377,12 +378,23 @@ IMPORTANT NOTES:
 
             result = response.choices[0].message.content
             logger.info("Received response from Azure OpenAI")
+            
+            # Extract token usage from response
+            token_usage = TokenUsage(
+                prompt_tokens=response.usage.prompt_tokens,
+                completion_tokens=response.usage.completion_tokens,
+                total_tokens=response.usage.total_tokens
+            )
+            
+            logger.info(f"Token usage - Prompt: {token_usage.prompt_tokens}, Completion: {token_usage.completion_tokens}, Total: {token_usage.total_tokens}")
 
             # Parse JSON response
-            return json.loads(result)
+            parsed_result = json.loads(result)
+            return parsed_result, token_usage
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse AI response as JSON: {e}")
+            # Return error response with zero token usage (partial count before error)
             return {
                 "summary": "Error parsing AI response - unable to complete analysis",
                 "comments": [],
@@ -394,7 +406,7 @@ IMPORTANT NOTES:
                     "complexity_score": 0,
                     "analysis_error": "JSON parsing failed"
                 }
-            }
+            }, TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
         except Exception as e:
             logger.error(f"Error calling AI model: {str(e)}")
             return {
@@ -408,7 +420,7 @@ IMPORTANT NOTES:
                     "complexity_score": 0,
                     "analysis_error": "AI service unavailable"
                 }
-            }
+            }, TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
 
     def _extract_original_code_from_diff(self, diff_content: str, file_path: str, line_start: int, line_end: Optional[int] = None) -> Optional[str]:
         """
@@ -569,15 +581,18 @@ IMPORTANT NOTES:
         # Parse diff into files
         files_info = self._parse_diff_files(request.diff)
         file_reviews = []
-
         all_comments = []
+        total_tokens = TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
 
         for file_info in files_info:
             logger.info(f"Analyzing file: {file_info['path']}")
 
             # Generate prompt and call AI
             prompt = self._generate_review_prompt(file_info, config)
-            ai_response = self._call_ai_model(prompt)
+            ai_response, file_tokens = self._call_ai_model(prompt)
+            
+            # Accumulate tokens
+            total_tokens = total_tokens + file_tokens
 
             # Parse AI response
             comments_data = ai_response.get('comments', [])
@@ -627,7 +642,8 @@ IMPORTANT NOTES:
                 language=file_info.get('language'),
                 summary=file_summary,
                 comments=comments,
-                metrics=metrics
+                metrics=metrics,
+                tokens_used=file_tokens
             )
 
             file_reviews.append(file_review)
@@ -696,7 +712,8 @@ IMPORTANT NOTES:
                 'author': request.author,
                 'analyzed_at': datetime.now().isoformat(),
                 'security_analysis': security_analysis
-            }
+            },
+            token_usage=total_tokens
         )
 
         # Cache the result
@@ -728,19 +745,19 @@ IMPORTANT NOTES:
         high = [c for c in security_comments if c.severity.value == 'high']
         medium = [c for c in security_comments if c.severity.value == 'medium']
 
-        # Enhanced vulnerability pattern detection
+        # Enhanced vulnerability pattern detection with OWASP categories
         patterns = []
         categories_found = {}
         vulnerability_types = {
-            'injection': ['sql injection', 'command injection', 'code injection', 'ldap injection'],
-            'xss': ['cross-site scripting', 'xss', 'script injection'],
-            'authentication': ['auth', 'login', 'password', 'credential', 'session'],
-            'authorization': ['access control', 'permission', 'role', 'privilege escalation'],
-            'hardcoded': ['hardcoded', 'secret', 'key', 'token', 'password', 'api key'],
-            'validation': ['input validation', 'sanitization', 'filtering', 'trust boundary'],
-            'encryption': ['encryption', 'crypto', 'hash', 'cipher', 'plaintext'],
-            'configuration': ['config', 'misconfiguration', 'default credentials'],
-            'data_leakage': ['information disclosure', 'sensitive data', 'privacy']
+            'injection': ['sql injection', 'command injection', 'code injection', 'ldap injection', 'nosql injection', 'path traversal'],
+            'xss': ['cross-site scripting', 'xss', 'script injection', 'html injection', 'dom-based xss'],
+            'authentication': ['auth', 'login', 'password', 'credential', 'session', 'mfa', '2fa', 'weak auth'],
+            'authorization': ['access control', 'permission', 'role', 'privilege escalation', 'idor', 'broken access'],
+            'hardcoded': ['hardcoded', 'secret', 'key', 'token', 'password', 'api key', 'credential'],
+            'validation': ['input validation', 'sanitization', 'filtering', 'trust boundary', 'deserialization', 'validate'],
+            'encryption': ['encryption', 'crypto', 'hash', 'cipher', 'plaintext', 'ssl', 'tls', 'weak crypto'],
+            'configuration': ['config', 'misconfiguration', 'default credentials', 'debug mode', 'exposed endpoint'],
+            'data_leakage': ['information disclosure', 'sensitive data', 'privacy', 'pii', 'data exposure', 'information leak']
         }
 
         for comment in security_comments:
@@ -814,30 +831,35 @@ IMPORTANT NOTES:
             risk_level = "Low"
             summary = f"✅ **SECURE:** All security checks passed. Code follows security best practices."
 
-        # Enhanced, actionable recommendations
+        # Enhanced, actionable recommendations with priority levels
         recommendations = []
         if total_sec_issues > 0:
             if len(critical) > 0:
-                recommendations.append("🚨 **URGENT:** Fix all critical vulnerabilities immediately - these are blocking deployment")
-                recommendations.append("🔧 **ACTION:** Review critical findings above and implement suggested fixes")
+                recommendations.append("🚨 **URGENT (P0 - 24h):** Fix all critical vulnerabilities immediately - these are blocking deployment")
+                recommendations.append("🔧 **ACTION:** Review critical findings above and implement suggested fixes within 24 hours")
             if len(high) > 0:
-                recommendations.append("⚠️ **HIGH PRIORITY:** Address high-severity security issues before production deployment")
-                recommendations.append("🔍 **REVIEW:** Examine high-risk findings and apply security patches")
+                recommendations.append("⚠️ **HIGH PRIORITY (P1 - 48h):** Address high-severity security issues before production deployment")
+                recommendations.append("🔍 **REVIEW:** Examine high-risk findings and apply security patches within 48 hours")
+            if len(medium) > 0:
+                recommendations.append("🟡 **MEDIUM PRIORITY (P2 - 1 week):** Schedule fixes for medium-severity issues in next sprint")
             if patterns:
                 top_patterns = [p.split(':')[0].replace('**', '') for p in patterns[:3]]
-                recommendations.append(f"🎯 **FOCUS AREAS:** Prioritize fixing {', '.join(top_patterns)} vulnerabilities")
-            recommendations.append("🧪 **TESTING:** Add security unit tests and integration tests for vulnerable code paths")
-            recommendations.append("📚 **TRAINING:** Consider security awareness training for development team")
-            recommendations.append("🔒 **TOOLS:** Implement SAST/SCA tools in CI/CD pipeline for ongoing security")
+                recommendations.append(f"🎯 **FOCUS AREAS:** Prioritize fixing {', '.join(top_patterns)} patterns - highest impact fixes")
+            recommendations.append("🧪 **TESTING (P3):** Add security unit tests and integration tests for vulnerable code paths")
+            recommendations.append("📚 **KNOWLEDGE:** Security awareness training on " + (f"{list(categories_found.keys())[0].title()}" if categories_found else "OWASP Top 10"))
+            recommendations.append("🔒 **AUTOMATION:** Implement SAST tools (SonarQube, Checkmarx) in CI/CD for continuous security scanning")
 
         return {
             "overall_security_posture": posture,
             "critical_vulnerabilities": len(critical),
             "high_vulnerabilities": len(high),
             "medium_vulnerabilities": len(medium),
+            "low_vulnerabilities": len([c for c in security_comments if c.severity.value == 'low']),
             "total_security_issues": total_sec_issues,
+            "risk_score": max(0, 100 - (len(critical) * 25 + len(high) * 15 + len(medium) * 8 + len([c for c in security_comments if c.severity.value == 'low']) * 3)),
             "patterns": patterns,
             "risk_level": risk_level,
+            "action_required": "Deployment Blocked" if len(critical) > 0 else ("Fix Before Production" if len(high) > 0 else "Approved"),
             "summary": summary,
             "recommendations": recommendations,
             "severity_breakdown": {
@@ -845,6 +867,17 @@ IMPORTANT NOTES:
                 "high": len(high),
                 "medium": len(medium),
                 "low": len([c for c in security_comments if c.severity.value == 'low'])
+            },
+            "vulnerability_matrix": {
+                "injection": categories_found.get('injection', 0),
+                "xss": categories_found.get('xss', 0),
+                "authentication": categories_found.get('authentication', 0),
+                "authorization": categories_found.get('authorization', 0),
+                "hardcoded": categories_found.get('hardcoded', 0),
+                "validation": categories_found.get('validation', 0),
+                "encryption": categories_found.get('encryption', 0),
+                "configuration": categories_found.get('configuration', 0),
+                "data_leakage": categories_found.get('data_leakage', 0)
             },
             "file_locations": file_locations,
             "critical_findings": critical_findings,

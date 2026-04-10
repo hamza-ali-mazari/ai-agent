@@ -8,6 +8,7 @@ from typing import Optional, List, Dict, Any
 import requests
 from services.ai_review import AICodeReviewEngine, analyze_code_diff, CodeReviewRequest, CodeReviewResponse
 from services.kafka_config import KafkaConfigHandler
+from services.token_tracker import token_tracker
 from models.review import ReviewConfig
 from integrations.bitbucket_integration import BitbucketIntegration, BitbucketWebhookPayload
 
@@ -142,6 +143,19 @@ async def review_code(request: ReviewRequest):
 
         review_request = CodeReviewRequest(**request.dict())
         result = analyze_code_diff(review_request)
+
+        # Track token usage
+        token_tracker.record_analysis(result)
+        
+        # Log token usage report
+        token_report = token_tracker.format_analysis_report(result)
+        logger.info(token_report)
+        
+        # Log cumulative stats (every 10 analyses)
+        cumulative_stats = token_tracker.get_cumulative_stats()
+        if cumulative_stats['total_analyses'] % 10 == 0:
+            cumulative_report = token_tracker.format_cumulative_report()
+            logger.info(cumulative_report)
 
         logger.info(f"Code review completed successfully - {result.summary.total_comments} comments generated")
         return result
@@ -290,4 +304,43 @@ async def get_approval_status(
         raise
     except Exception as e:
         logger.error(f"Error checking approval status for PR#{pr_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/stats/tokens")
+async def get_token_stats():
+    """
+    Get cumulative token usage statistics for all analyses performed.
+    
+    Returns metrics including:
+    - Total tokens consumed across all reviews
+    - Average tokens per analysis/file/comment
+    - Total number of analyses performed
+    """
+    try:
+        stats = token_tracker.get_cumulative_stats()
+        return {
+            "status": "success",
+            "data": stats
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving token stats: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/stats/tokens/report")
+async def get_token_report():
+    """
+    Get a formatted token usage report for all analyses.
+    
+    Returns a formatted text report with detailed statistics.
+    """
+    try:
+        report = token_tracker.format_cumulative_report()
+        return {
+            "status": "success",
+            "report": report
+        }
+    except Exception as e:
+        logger.error(f"Error generating token report: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")

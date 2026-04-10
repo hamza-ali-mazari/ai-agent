@@ -3,6 +3,23 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 
 
+class TokenUsage(BaseModel):
+    """Track token usage for API calls"""
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    
+    def __add__(self, other):
+        """Allow adding token usage together"""
+        if not isinstance(other, TokenUsage):
+            return NotImplemented
+        return TokenUsage(
+            prompt_tokens=self.prompt_tokens + other.prompt_tokens,
+            completion_tokens=self.completion_tokens + other.completion_tokens,
+            total_tokens=self.total_tokens + other.total_tokens
+        )
+
+
 class ReviewSeverity(str, Enum):
     CRITICAL = "critical"
     HIGH = "high"
@@ -53,6 +70,7 @@ class FileReview(BaseModel):
     summary: str
     comments: List[ReviewComment]
     metrics: Optional[Dict[str, Any]] = None
+    tokens_used: Optional[TokenUsage] = None  # Token usage for this file's analysis
 
 
 class ReviewSummary(BaseModel):
@@ -111,6 +129,7 @@ class CodeReviewResponse(BaseModel):
     overall_feedback: str
     recommendations: List[str]
     metadata: Optional[Dict[str, Any]] = None
+    token_usage: Optional[TokenUsage] = None  # Overall token usage for entire review
 
 
 class ReviewConfig(BaseModel):
