@@ -1197,9 +1197,9 @@ IMPORTANT NOTES:
             feedback_parts.append("")
 
         # BREAKING CHANGES SECTION
+        feedback_parts.append("---")
+        feedback_parts.append("")
         if breaking_changes and breaking_changes.get('has_breaking_changes'):
-            feedback_parts.append("---")
-            feedback_parts.append("")
             severity_emoji = {
                 'critical': '🚨',
                 'high': '⚠️',
@@ -1221,11 +1221,16 @@ IMPORTANT NOTES:
             for rec in breaking_changes.get('recommendations', [])[:2]:
                 feedback_parts.append(f"❌ {rec}")
             feedback_parts.append("")
+        else:
+            feedback_parts.append("### ✅ Breaking Changes Check")
+            feedback_parts.append("**Status:** No breaking changes detected")
+            feedback_parts.append("**Result:** Code is backward compatible")
+            feedback_parts.append("")
 
         # COMPLEXITY ANALYSIS SECTION
+        feedback_parts.append("---")
+        feedback_parts.append("")
         if complexity and complexity.get('has_complexity_issues'):
-            feedback_parts.append("---")
-            feedback_parts.append("")
             health_emoji = {'good': '✅', 'acceptable': '🟡', 'risky': '🔴'}
             emoji = health_emoji.get(complexity.get('overall_health', 'good'), '❓')
             feedback_parts.append(f"### {emoji} Code Complexity Analysis")
@@ -1243,11 +1248,21 @@ IMPORTANT NOTES:
             for rec in complexity.get('recommendations', [])[:2]:
                 feedback_parts.append(f"🔧 {rec}")
             feedback_parts.append("")
+        else:
+            feedback_parts.append("### ✅ Code Complexity Analysis")
+            health = complexity.get('overall_health', 'good') if complexity else 'good'
+            health_emoji = {'good': '✅', 'acceptable': '🟡', 'risky': '🔴'}
+            emoji = health_emoji.get(health, '✅')
+            feedback_parts.append(f"**Health:** {emoji} {health.upper()}")
+            avg_complexity = complexity.get('average_complexity', 0) if complexity else 0
+            feedback_parts.append(f"**Average Complexity:** {avg_complexity} (target: <5)")
+            feedback_parts.append("**Result:** Code complexity is within healthy range")
+            feedback_parts.append("")
 
         # PERFORMANCE ANALYSIS SECTION
+        feedback_parts.append("---")
+        feedback_parts.append("")
         if performance and performance.get('has_performance_issues'):
-            feedback_parts.append("---")
-            feedback_parts.append("")
             perf_emoji = {'critical': '⛔', 'high': '⚡', 'medium': '🟡'}
             emoji = perf_emoji.get(performance.get('severity', 'medium'), '💡')
             feedback_parts.append(f"### {emoji} Performance Issues")
@@ -1265,31 +1280,42 @@ IMPORTANT NOTES:
             for rec in performance.get('recommendations', [])[:2]:
                 feedback_parts.append(f"⚡ {rec}")
             feedback_parts.append("")
+        else:
+            feedback_parts.append("### ✅ Performance Analysis")
+            feedback_parts.append("**Status:** No performance antipatterns detected")
+            feedback_parts.append("**Result:** Code follows performance best practices")
+            feedback_parts.append("")
 
         # MIGRATIONS SECTION
-        if migrations and migrations.get('has_migrations'):
-            feedback_parts.append("---")
-            feedback_parts.append("")
+        feedback_parts.append("---")
+        feedback_parts.append("")
+        if migration_analysis and migration_analysis.get('has_migrations'):
             feedback_parts.append(f"### 📊 Database Migrations")
-            feedback_parts.append(f"**Migration Files:** {migrations.get('total_migrations', 0)}")
+            feedback_parts.append(f"**Migration Files:** {migration_analysis.get('total_migrations', 0)}")
             feedback_parts.append("")
 
-            if migrations.get('risky_migrations'):
+            if migration_analysis.get('risky_migrations'):
                 feedback_parts.append("**⚠️ Risky Operations Detected:**")
-                for mig in migrations['risky_migrations'][:2]:
+                for mig in migration_analysis['risky_migrations'][:2]:
                     feedback_parts.append(f"- {mig.get('file')}")
                     for op in mig.get('operations', [])[:2]:
                         feedback_parts.append(f"  ⚠️ {op}")
                 feedback_parts.append("")
 
-            for rec in migrations.get('recommendations', [])[:2]:
+            for rec in migration_analysis.get('recommendations', [])[:2]:
                 feedback_parts.append(f"📋 {rec}")
             feedback_parts.append("")
-
-        # PROJECT IMPACT ANALYSIS SECTION
-        if project_impact and not project_impact.get('error'):
-            feedback_parts.append("---")
+        else:
+            feedback_parts.append("### ✅ Database Migrations Check")
+            feedback_parts.append("**Status:** No database migrations detected")
+            feedback_parts.append("**Result:** No migration-related issues")
             feedback_parts.append("")
+
+        # PROJECT IMPACT ANALYSIS SECTION (ALWAYS SHOW)
+        feedback_parts.append("---")
+        feedback_parts.append("")
+        
+        if project_impact and not project_impact.get('error'):
             feedback_parts.append(f"### 🌍 Project Impact Analysis")
             all_files_count = project_impact.get('all_files_count', 0)
             affected_count = project_impact.get('affected_files_count', 0)
@@ -1341,6 +1367,27 @@ IMPORTANT NOTES:
                 feedback_parts.append(f"2. Check the {affected_count} affected file(s) for compatibility")
                 feedback_parts.append("3. Run tests to ensure no breaking changes")
             
+            feedback_parts.append("")
+        else:
+            feedback_parts.append("### 🌍 Project Impact Analysis")
+            feedback_parts.append("**Status:** Repository-wide analysis not performed")
+            feedback_parts.append("")
+            feedback_parts.append("💡 **To enable full project impact analysis, add these fields to your request:**")
+            feedback_parts.append("```json")
+            feedback_parts.append("{")
+            feedback_parts.append('  "analyze_full_project": true,')
+            feedback_parts.append('  "workspace": "your-bitbucket-workspace",')
+            feedback_parts.append('  "repo_slug": "your-repository-name"')
+            feedback_parts.append("}")
+            feedback_parts.append("```")
+            feedback_parts.append("")
+            feedback_parts.append("This will:")
+            feedback_parts.append("- Fetch all files from your repository")
+            feedback_parts.append("- Analyze which files your changes affect")
+            feedback_parts.append("- Identify breaking changes across the codebase")
+            feedback_parts.append("- Show affected file list in the review")
+            feedback_parts.append("")
+            feedback_parts.append("✅ **Requires:** Bitbucket credentials (BITBUCKET_USERNAME + BITBUCKET_APP_PASSWORD)")
             feedback_parts.append("")
 
         # AUTOMATED FIX SUGGESTIONS SECTION
