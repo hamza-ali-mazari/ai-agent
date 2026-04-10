@@ -62,13 +62,14 @@ async def startup_health_check():
 async def health_check():
     """Health check endpoint"""
     azure_ok = getattr(app.state, "azure_openai_available", False)
+    health_msg = getattr(app.state, "azure_openai_health_message", "Not checked")
     status_code = 200 if azure_ok else 503
     status = "healthy" if azure_ok else "degraded"
     return JSONResponse(status_code=status_code, content={
         "status": status,
         "version": "2.0.0",
         "azure_openai_available": azure_ok,
-        "azure_openai_health_message": app.state.azure_openai_health_message
+        "azure_openai_health_message": health_msg
     })
 
 class ReviewRequest(BaseModel):
@@ -131,15 +132,18 @@ async def review_code(request: ReviewRequest):
     and actionable recommendations.
     """
     try:
-        if not getattr(app.state, "azure_openai_available", False):
-            raise HTTPException(
-                status_code=503,
-                detail=f"Azure OpenAI unavailable: {app.state.azure_openai_health_message}"
-            )
-
+        # Validate request first before checking service availability
         logger.info("Received code review request")
         if not request.diff.strip():
             raise HTTPException(status_code=400, detail="Diff cannot be empty")
+
+        # Then check service availability
+        if not getattr(app.state, "azure_openai_available", False):
+            health_msg = getattr(app.state, "azure_openai_health_message", "Unknown error")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Azure OpenAI unavailable: {health_msg}"
+            )
 
         review_request = CodeReviewRequest(**request.dict())
         result = analyze_code_diff(review_request)
@@ -178,15 +182,18 @@ async def review_code_legacy(request: LegacyReviewRequest):
     Returns simple text-based review (deprecated - use /review instead).
     """
     try:
-        if not getattr(app.state, "azure_openai_available", False):
-            raise HTTPException(
-                status_code=503,
-                detail=f"Azure OpenAI unavailable: {app.state.azure_openai_health_message}"
-            )
-
+        # Validate request first before checking service availability
         logger.info("Received legacy code review request")
         if not request.diff.strip():
             raise HTTPException(status_code=400, detail="Diff cannot be empty")
+
+        # Then check service availability
+        if not getattr(app.state, "azure_openai_available", False):
+            health_msg = getattr(app.state, "azure_openai_health_message", "Unknown error")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Azure OpenAI unavailable: {health_msg}"
+            )
 
         # Convert to new format
         review_request = CodeReviewRequest(diff=request.diff)
@@ -242,9 +249,10 @@ async def bitbucket_webhook(
     logger.info(f"Event key from header: {event_key}")
 
     if not getattr(app.state, "azure_openai_available", False):
+        health_msg = getattr(app.state, "azure_openai_health_message", "Unknown error")
         raise HTTPException(
             status_code=503,
-            detail=f"Azure OpenAI unavailable: {app.state.azure_openai_health_message}"
+            detail=f"Azure OpenAI unavailable: {health_msg}"
         )
 
     # Handle the event in background
@@ -275,9 +283,10 @@ async def get_approval_status(
     """
     try:
         if not getattr(app.state, "azure_openai_available", False):
+            health_msg = getattr(app.state, "azure_openai_health_message", "Unknown error")
             raise HTTPException(
                 status_code=503,
-                detail=f"Azure OpenAI unavailable: {app.state.azure_openai_health_message}"
+                detail=f"Azure OpenAI unavailable: {health_msg}"
             )
 
         request_body = body or {}
