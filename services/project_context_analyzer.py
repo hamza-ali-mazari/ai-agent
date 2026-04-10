@@ -178,7 +178,8 @@ class ProjectContextAnalyzer:
             "affected_files": list(affected_files),
             "dependency_graph": dict(dependency_graph),
             "changed_exports": changed_exports,
-            "impact_level": self._calculate_impact_level(affected_files, len(all_files))
+            "impact_level": self._calculate_impact_level(affected_files, len(all_files)),
+            "total_files": len(all_files)
         }
 
     def _extract_exports(self, files: Dict[str, str]) -> Dict[str, Set[str]]:
@@ -377,6 +378,7 @@ class ProjectContextAnalyzer:
         
         impact_level = dependency_analysis.get("impact_level", "unknown")
         affected_count = len(dependency_analysis.get("affected_files", []))
+        total_files = dependency_analysis.get("total_files", 0)
         
         level_emoji = {
             "critical": "🚨",
@@ -387,33 +389,82 @@ class ProjectContextAnalyzer:
         }
         
         emoji = level_emoji.get(impact_level, "❓")
+        
+        # Analysis summary
+        report.append(f"**Total Files Analyzed:** {total_files} files scanned")
+        report.append(f"**Files Changed:** {len(changed_files)}")
         report.append(f"**Impact Level:** {emoji} {impact_level.upper()}")
-        report.append(f"**Affected Files:** {affected_count}")
         report.append("")
         
-        if affected_count > 0:
-            report.append("**Files that may be affected by your changes:**")
-            for file in dependency_analysis.get("affected_files", [])[:10]:
+        # CHECK: Are there affected files or not?
+        if affected_count == 0:
+            # ✅ NO ISSUES - SAFE TO MERGE
+            report.append("### ✅ **NO ISSUES DETECTED**")
+            report.append("")
+            report.append("**Status:** This change is ISOLATED and does NOT affect other files")
+            report.append("")
+            report.append(f"**Your changes in:**")
+            for file in changed_files:
                 report.append(f"- {file}")
+            report.append("")
+            report.append("**Safe Files:** All other files in the project are NOT impacted")
+            report.append("")
+            report.append("### ✅ Recommendation: SAFE TO MERGE")
+            report.append("This PR can be safely merged without affecting other parts of the codebase.")
+            
+        else:
+            # ⚠️ POTENTIAL ISSUES - FILES AFFECTED
+            report.append(f"### ⚠️ **{affected_count} FILE(S) AFFECTED**")
+            report.append("")
+            report.append(f"**Status:** Your changes will affect {affected_count} other file(s)")
+            report.append("")
+            
+            report.append(f"**Files Changed:**")
+            for file in changed_files:
+                report.append(f"- 📝 {file}")
+            report.append("")
+            
+            report.append(f"**Affected Files (may need review/update):**")
+            affected_files = dependency_analysis.get("affected_files", [])
+            for i, file in enumerate(affected_files[:10], 1):
+                report.append(f"{i}. ⚠️ {file}")
+            
             if affected_count > 10:
-                report.append(f"- ... and {affected_count - 10} more files")
+                report.append(f"... and {affected_count - 10} more files")
             report.append("")
+            
+            # Show dependency chain
+            dep_graph = dependency_analysis.get("dependency_graph", {})
+            if dep_graph:
+                report.append("**Dependency Chain:**")
+                for changed_file, dependents in dep_graph.items():
+                    report.append(f"")
+                    report.append(f"📝 **{changed_file}** exports:")
+                    exports = dependency_analysis.get("changed_exports", {}).get(changed_file, [])
+                    if exports:
+                        for export in list(exports)[:5]:
+                            report.append(f"   - `{export}`")
+                    report.append(f"")
+                    report.append(f"   📍 Used by {len(dependents)} file(s):")
+                    for dependent in dependents[:5]:
+                        report.append(f"      └─ {dependent}")
+                    if len(dependents) > 5:
+                        report.append(f"      └─ ... and {len(dependents) - 5} more")
+                report.append("")
+            
+            report.append(f"### ⚠️ Recommendation: REVIEW AFFECTED FILES")
+            report.append(f"Before merging, please:")
+            report.append(f"1. Review changes in **{changed_files[0]}** (primary change)")
+            report.append(f"2. Check **{affected_count} affected file(s)** for compatibility")
+            report.append(f"3. Run tests to ensure no breaking changes")
         
-        # Show dependency graph
-        dep_graph = dependency_analysis.get("dependency_graph", {})
-        if dep_graph:
-            report.append("**Dependency Graph:**")
-            for changed_file, dependents in dep_graph.items():
-                report.append(f"- **{changed_file}** is used by:")
-                for dependent in dependents[:3]:
-                    report.append(f"  - {dependent}")
-                if len(dependents) > 3:
-                    report.append(f"  - ... and {len(dependents) - 3} more files")
-            report.append("")
-        
-        report.append("**Recommendation:** Review affected files to ensure compatibility with your changes.")
+        report.append("")
+        report.append("---")
+        report.append("")
         
         return "\n".join(report)
+
+
 
 
 # Global instance

@@ -774,11 +774,13 @@ IMPORTANT NOTES:
                 dependency_analysis=dependency_analysis
             )
             
-            logger.info(f"Project impact analysis complete - {len(dependency_analysis.get('affected_files', []))} files affected")
+            affected_count = len(dependency_analysis.get('affected_files', []))
+            logger.info(f"Project impact analysis complete - {affected_count} files affected out of {len(all_files)} total")
             
             return {
                 "all_files_count": len(all_files),
                 "changed_files": changed_files,
+                "affected_files_count": affected_count,
                 "dependency_analysis": dependency_analysis,
                 "impact_report": impact_report
             }
