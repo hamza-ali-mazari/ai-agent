@@ -153,7 +153,7 @@ async def review_code(request: ReviewRequest):
         
         # Log cumulative stats (every 10 analyses)
         cumulative_stats = token_tracker.get_cumulative_stats()
-        if cumulative_stats['total_analyses'] % 10 == 0:
+        if cumulative_stats['analyses_count'] % 10 == 0:
             cumulative_report = token_tracker.format_cumulative_report()
             logger.info(cumulative_report)
 

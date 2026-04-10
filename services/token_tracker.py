@@ -21,14 +21,29 @@ class TokenTracker:
     def record_analysis(self, response: Dict[str, Any]) -> None:
         """Record token usage from an analysis response."""
         try:
-            if hasattr(response, 'token_usage') and response.token_usage:
-                self.total_prompt_tokens += response.token_usage.prompt_tokens
-                self.total_completion_tokens += response.token_usage.completion_tokens
-                self.total_tokens += response.token_usage.total_tokens
+            # Handle both dict and Pydantic model responses
+            if hasattr(response, 'token_usage'):
+                token_usage = response.token_usage
+            elif isinstance(response, dict) and 'token_usage' in response:
+                token_usage = response['token_usage']
+            else:
+                token_usage = None
+            
+            if token_usage:
+                # Handle both dict and object access
+                prompt = token_usage.get('prompt_tokens', 0) if isinstance(token_usage, dict) else getattr(token_usage, 'prompt_tokens', 0)
+                completion = token_usage.get('completion_tokens', 0) if isinstance(token_usage, dict) else getattr(token_usage, 'completion_tokens', 0)
+                total = token_usage.get('total_tokens', 0) if isinstance(token_usage, dict) else getattr(token_usage, 'total_tokens', 0)
+                
+                self.total_prompt_tokens += prompt
+                self.total_completion_tokens += completion
+                self.total_tokens += total
+                logger.info(f"Token tracker: +{total} tokens (prompt: {prompt}, completion: {completion})")
+            
             self.analyses_count += 1
-            logger.info(f"Token tracker: +{response.token_usage.total_tokens if hasattr(response, 'token_usage') else 0} tokens")
         except Exception as e:
             logger.warning(f"Error recording token usage: {e}")
+            self.analyses_count += 1
 
     def get_cumulative_stats(self) -> Dict[str, Any]:
         """Get cumulative token usage statistics."""
