@@ -769,7 +769,14 @@ IMPORTANT NOTES:
                 'security_analysis': security_analysis
             },
             token_usage=total_tokens,
-            project_impact_analysis=project_impact_analysis
+            project_impact_analysis=project_impact_analysis,
+            # New comprehensive analyses
+            test_coverage_analysis=test_coverage_analysis,
+            breaking_changes_analysis=breaking_changes_analysis,
+            complexity_analysis=complexity_analysis,
+            performance_analysis=performance_analysis,
+            migration_analysis=migration_analysis,
+            automated_fixes=automated_fixes
         )
 
         # Cache the result

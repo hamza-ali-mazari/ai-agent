@@ -146,6 +146,14 @@ class CodeReviewResponse(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     token_usage: Optional[TokenUsage] = None  # Overall token usage for entire review
     project_impact_analysis: Optional[Dict[str, Any]] = None  # Full project context and impact analysis
+    
+    # New comprehensive analysis results
+    test_coverage_analysis: Optional[Dict[str, Any]] = None  # Test coverage metrics and warnings
+    breaking_changes_analysis: Optional[Dict[str, Any]] = None  # Breaking changes detection
+    complexity_analysis: Optional[Dict[str, Any]] = None  # Code complexity metrics
+    performance_analysis: Optional[Dict[str, Any]] = None  # Performance antipatterns
+    migration_analysis: Optional[Dict[str, Any]] = None  # Database migration analysis
+    automated_fixes: Optional[List[Dict[str, Any]]] = None  # Automated fix code suggestions
 
 
 class ReviewConfig(BaseModel):
