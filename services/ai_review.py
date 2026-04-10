@@ -748,7 +748,8 @@ IMPORTANT NOTES:
             summary, file_reviews, security_analysis,
             test_coverage_analysis, breaking_changes_analysis,
             complexity_analysis, performance_analysis,
-            migration_analysis, automated_fixes
+            migration_analysis, automated_fixes,
+            project_impact_analysis
         )
 
         # Generate recommendations
@@ -1008,7 +1009,8 @@ IMPORTANT NOTES:
         complexity: Dict[str, Any] = None,
         performance: Dict[str, Any] = None,
         migrations: Dict[str, Any] = None,
-        automated_fixes: List[Dict[str, Any]] = None
+        automated_fixes: List[Dict[str, Any]] = None,
+        project_impact: Dict[str, Any] = None
     ) -> str:
         """Generate Code Rabbit style detailed analysis with prominent token tracking."""
         if summary.analysis_errors > 0:
@@ -1282,6 +1284,63 @@ IMPORTANT NOTES:
 
             for rec in migrations.get('recommendations', [])[:2]:
                 feedback_parts.append(f"📋 {rec}")
+            feedback_parts.append("")
+
+        # PROJECT IMPACT ANALYSIS SECTION
+        if project_impact and not project_impact.get('error'):
+            feedback_parts.append("---")
+            feedback_parts.append("")
+            feedback_parts.append(f"### 🌍 Project Impact Analysis")
+            all_files_count = project_impact.get('all_files_count', 0)
+            affected_count = project_impact.get('affected_files_count', 0)
+            changed_files = project_impact.get('changed_files', [])
+            
+            feedback_parts.append(f"**Repository Scope:** {all_files_count} total files analyzed")
+            feedback_parts.append(f"**Your Changes:** {len(changed_files)} file(s) modified")
+            feedback_parts.append("")
+            
+            if affected_count == 0:
+                feedback_parts.append("### ✅ **NO ISSUES DETECTED**")
+                feedback_parts.append("")
+                feedback_parts.append("**Status:** This change is ISOLATED and does NOT affect other files")
+                feedback_parts.append("")
+                feedback_parts.append(f"**Your changes in:**")
+                for f in changed_files[:5]:
+                    feedback_parts.append(f"- {f}")
+                if len(changed_files) > 5:
+                    feedback_parts.append(f"- ... and {len(changed_files) - 5} more")
+                feedback_parts.append("")
+                feedback_parts.append("**Safe:** All other files in the project are NOT impacted")
+                feedback_parts.append("")
+                feedback_parts.append("### ✅ Recommendation: SAFE TO MERGE")
+                feedback_parts.append("This PR can be safely merged without affecting other parts of the codebase.")
+            else:
+                feedback_parts.append(f"### ⚠️ **{affected_count} FILE(S) AFFECTED**")
+                feedback_parts.append("")
+                feedback_parts.append(f"**Status:** Your changes will affect {affected_count} other file(s)")
+                feedback_parts.append("")
+                feedback_parts.append("**Files Changed:**")
+                for f in changed_files[:5]:
+                    feedback_parts.append(f"- 📝 {f}")
+                if len(changed_files) > 5:
+                    feedback_parts.append(f"- ... and {len(changed_files) - 5} more")
+                feedback_parts.append("")
+                
+                affected_files = project_impact.get('dependency_analysis', {}).get('affected_files', [])
+                if affected_files:
+                    feedback_parts.append("**Affected Files (may need review/update):**")
+                    for i, f in enumerate(affected_files[:10], 1):
+                        feedback_parts.append(f"{i}. ⚠️ {f}")
+                    if len(affected_files) > 10:
+                        feedback_parts.append(f"... and {len(affected_files) - 10} more files")
+                    feedback_parts.append("")
+                
+                feedback_parts.append("### ⚠️ Recommendation: REVIEW AFFECTED FILES")
+                feedback_parts.append("Before merging, please:")
+                feedback_parts.append(f"1. Review the {len(changed_files)} changed file(s)")
+                feedback_parts.append(f"2. Check the {affected_count} affected file(s) for compatibility")
+                feedback_parts.append("3. Run tests to ensure no breaking changes")
+            
             feedback_parts.append("")
 
         # AUTOMATED FIX SUGGESTIONS SECTION
