@@ -8,6 +8,11 @@ from openai import AzureOpenAI
 from dotenv import load_dotenv
 from services.dependency_analyzer import DependencyAnalyzer
 from services.project_context_analyzer import project_analyzer
+from services.test_coverage_analyzer import test_coverage_analyzer
+from services.breaking_changes_detector import breaking_changes_detector
+from services.complexity_analyzer import complexity_analyzer
+from services.performance_analyzer import performance_analyzer
+from services.migration_analyzer import migration_analyzer, fix_generator
 from models.review import (
     CodeReviewRequest,
     CodeReviewResponse,
@@ -714,6 +719,24 @@ IMPORTANT NOTES:
         # Generate consolidated security analysis (one-time for all changes)
         security_analysis = self._generate_consolidated_security_analysis(all_comments)
 
+        # ADVANCED ANALYSIS: Run comprehensive code quality and performance analyzers
+        test_coverage_analysis = test_coverage_analyzer.analyze_test_coverage(files_info, all_files={})
+        breaking_changes_analysis = breaking_changes_detector.detect_breaking_changes(files_info)
+        complexity_analysis = complexity_analyzer.analyze_complexity(files_info)
+        performance_analysis = performance_analyzer.analyze_performance(files_info)
+        migration_analysis = migration_analyzer.analyze_migrations(files_info)
+
+        # Generate automated fix suggestions for top issues
+        top_issues = []
+        if breaking_changes_analysis.get('breaking_changes'):
+            top_issues.extend(breaking_changes_analysis.get('breaking_changes')[:2])
+        if complexity_analysis.get('high_complexity_files'):
+            top_issues.extend(complexity_analysis.get('high_complexity_files')[:2])
+        if performance_analysis.get('high_priority_issues'):
+            top_issues.extend(performance_analysis.get('high_priority_issues')[:2])
+
+        automated_fixes = fix_generator.generate_fixes(top_issues)
+
         # Analyze project impact if full project context is requested
         project_impact_analysis = None
         if request.analyze_full_project and request.workspace and request.repo_slug:
@@ -721,7 +744,12 @@ IMPORTANT NOTES:
             project_impact_analysis = self._analyze_project_impact(request)
 
         # Generate overall feedback (non-repetitive)
-        overall_feedback = self._generate_overall_feedback(summary, file_reviews, security_analysis)
+        overall_feedback = self._generate_overall_feedback(
+            summary, file_reviews, security_analysis,
+            test_coverage_analysis, breaking_changes_analysis,
+            complexity_analysis, performance_analysis,
+            migration_analysis, automated_fixes
+        )
 
         # Generate recommendations
         recommendations = self._generate_recommendations(summary, file_reviews)
@@ -963,7 +991,18 @@ IMPORTANT NOTES:
             "high_findings": high_findings
         }
 
-    def _generate_overall_feedback(self, summary: ReviewSummary, files: List[FileReview], security_analysis: Dict[str, Any]) -> str:
+    def _generate_overall_feedback(
+        self, 
+        summary: ReviewSummary, 
+        files: List[FileReview], 
+        security_analysis: Dict[str, Any],
+        test_coverage: Dict[str, Any] = None,
+        breaking_changes: Dict[str, Any] = None,
+        complexity: Dict[str, Any] = None,
+        performance: Dict[str, Any] = None,
+        migrations: Dict[str, Any] = None,
+        automated_fixes: List[Dict[str, Any]] = None
+    ) -> str:
         """Generate Code Rabbit style detailed analysis with prominent token tracking."""
         if summary.analysis_errors > 0:
             return (
@@ -1119,6 +1158,147 @@ IMPORTANT NOTES:
             if dep_breakdown:
                 feedback_parts.append(f"**Severity Breakdown:** {' | '.join(dep_breakdown)}")
             feedback_parts.append("")
+
+        # TEST COVERAGE ANALYSIS SECTION
+        if test_coverage and test_coverage.get('test_coverage_level') != 'not_applicable':
+            feedback_parts.append("---")
+            feedback_parts.append("")
+            feedback_parts.append("### 🧪 Test Coverage Analysis")
+            coverage_level = test_coverage.get('test_coverage_level', 'unknown')
+            coverage_emoji = {
+                'excellent': '✅',
+                'good': '🟢',
+                'partial': '🟡',
+                'not_tested': '🔴',
+                'not_applicable': '⚪'
+            }
+            emoji = coverage_emoji.get(coverage_level, '❓')
+            coverage_pct = test_coverage.get('coverage_percentage', 0)
+            feedback_parts.append(f"**Coverage Level:** {emoji} {coverage_level.upper()} ({coverage_pct}%)")
+            feedback_parts.append("")
+
+            if test_coverage.get('risky_untested_changes'):
+                feedback_parts.append(f"**⚠️ Untested Changes:** {len(test_coverage['risky_untested_changes'])} file(s)")
+                for f in test_coverage['risky_untested_changes'][:3]:
+                    feedback_parts.append(f"- {f.get('file', 'Unknown')}: {f.get('reason', 'No tests')}")
+                feedback_parts.append("")
+
+            for rec in test_coverage.get('recommendations', [])[:2]:
+                feedback_parts.append(f"💡 {rec}")
+            feedback_parts.append("")
+
+        # BREAKING CHANGES SECTION
+        if breaking_changes and breaking_changes.get('has_breaking_changes'):
+            feedback_parts.append("---")
+            feedback_parts.append("")
+            severity_emoji = {
+                'critical': '🚨',
+                'high': '⚠️',
+                'medium': '🟡',
+                'low': '🔵'
+            }
+            emoji = severity_emoji.get(breaking_changes.get('severity'), '❓')
+            feedback_parts.append(f"### {emoji} Breaking Changes Detected")
+            feedback_parts.append(f"**Count:** {breaking_changes.get('breaking_changes_count', 0)} breaking change(s)")
+            feedback_parts.append("")
+
+            for change in breaking_changes.get('breaking_changes', [])[:3]:
+                feedback_parts.append(f"⚠️ **{change.get('type', 'Change').upper()}**")
+                feedback_parts.append(f"   Name: `{change.get('name', 'Unknown')}`")
+                feedback_parts.append(f"   Impact: {change.get('impact', 'Unknown')}")
+                feedback_parts.append(f"   Fix: {change.get('fix', 'N/A')}")
+                feedback_parts.append("")
+
+            for rec in breaking_changes.get('recommendations', [])[:2]:
+                feedback_parts.append(f"❌ {rec}")
+            feedback_parts.append("")
+
+        # COMPLEXITY ANALYSIS SECTION
+        if complexity and complexity.get('has_complexity_issues'):
+            feedback_parts.append("---")
+            feedback_parts.append("")
+            health_emoji = {'good': '✅', 'acceptable': '🟡', 'risky': '🔴'}
+            emoji = health_emoji.get(complexity.get('overall_health', 'good'), '❓')
+            feedback_parts.append(f"### {emoji} Code Complexity Analysis")
+            feedback_parts.append(f"**Health:** {emoji} {complexity.get('overall_health', 'unknown').upper()}")
+            feedback_parts.append(f"**Average Complexity:** {complexity.get('average_complexity', 0)}")
+            feedback_parts.append("")
+
+            if complexity.get('high_complexity_files'):
+                feedback_parts.append("**⚠️ High Complexity Files:**")
+                for cf in complexity['high_complexity_files'][:3]:
+                    feedback_parts.append(f"- {cf.get('file')}: CC={cf.get('cyclomatic_complexity')} (threshold: {cf.get('threshold')})")
+                    feedback_parts.append(f"  💡 {cf.get('suggestion', 'Refactor needed')}")
+                feedback_parts.append("")
+
+            for rec in complexity.get('recommendations', [])[:2]:
+                feedback_parts.append(f"🔧 {rec}")
+            feedback_parts.append("")
+
+        # PERFORMANCE ANALYSIS SECTION
+        if performance and performance.get('has_performance_issues'):
+            feedback_parts.append("---")
+            feedback_parts.append("")
+            perf_emoji = {'critical': '⛔', 'high': '⚡', 'medium': '🟡'}
+            emoji = perf_emoji.get(performance.get('severity', 'medium'), '💡')
+            feedback_parts.append(f"### {emoji} Performance Issues")
+            feedback_parts.append(f"**Total Issues:** {performance.get('total_issues', 0)}")
+            feedback_parts.append("")
+
+            if performance.get('high_priority_issues'):
+                feedback_parts.append("**High Priority Issues:**")
+                for issue in performance['high_priority_issues'][:2]:
+                    feedback_parts.append(f"- **{issue.get('type', 'Issue').replace('_', ' ').title()}**")
+                    feedback_parts.append(f"  Impact: {issue.get('impact', 'N/A')}")
+                    feedback_parts.append(f"  Fix: {issue.get('fix', 'N/A')}")
+                feedback_parts.append("")
+
+            for rec in performance.get('recommendations', [])[:2]:
+                feedback_parts.append(f"⚡ {rec}")
+            feedback_parts.append("")
+
+        # MIGRATIONS SECTION
+        if migrations and migrations.get('has_migrations'):
+            feedback_parts.append("---")
+            feedback_parts.append("")
+            feedback_parts.append(f"### 📊 Database Migrations")
+            feedback_parts.append(f"**Migration Files:** {migrations.get('total_migrations', 0)}")
+            feedback_parts.append("")
+
+            if migrations.get('risky_migrations'):
+                feedback_parts.append("**⚠️ Risky Operations Detected:**")
+                for mig in migrations['risky_migrations'][:2]:
+                    feedback_parts.append(f"- {mig.get('file')}")
+                    for op in mig.get('operations', [])[:2]:
+                        feedback_parts.append(f"  ⚠️ {op}")
+                feedback_parts.append("")
+
+            for rec in migrations.get('recommendations', [])[:2]:
+                feedback_parts.append(f"📋 {rec}")
+            feedback_parts.append("")
+
+        # AUTOMATED FIX SUGGESTIONS SECTION
+        if automated_fixes:
+            feedback_parts.append("---")
+            feedback_parts.append("")
+            feedback_parts.append("### 🛠️ Automated Fix Suggestions")
+            feedback_parts.append("")
+
+            for i, fix in enumerate(automated_fixes[:3], 1):
+                feedback_parts.append(f"**{i}. {fix.get('title', 'Fix Suggestion')}**")
+                feedback_parts.append("")
+                feedback_parts.append(f"**Before:**")
+                feedback_parts.append("```python")
+                feedback_parts.append(fix.get('code_before', 'N/A'))
+                feedback_parts.append("```")
+                feedback_parts.append("")
+                feedback_parts.append(f"**After:**")
+                feedback_parts.append("```python")
+                feedback_parts.append(fix.get('code_after', 'N/A'))
+                feedback_parts.append("```")
+                feedback_parts.append("")
+                feedback_parts.append(f"💡 {fix.get('explanation', 'See code comparison')}")
+                feedback_parts.append("")
 
         # FINAL TOKEN TRACKER STATS
         feedback_parts.append("---")
