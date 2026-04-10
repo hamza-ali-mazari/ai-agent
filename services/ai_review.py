@@ -606,6 +606,14 @@ IMPORTANT NOTES:
             # Limit comments per file
             comments = comments[:config.max_comments_per_file]
 
+            # DEDUPLICATION: Remove critical/high security issues from file comments
+            # These are already displayed in the overall security section to avoid repetition
+            filtered_comments = [
+                c for c in comments
+                if not (c.category.value == 'security' and c.severity.value in ['critical', 'high'])
+            ]
+            comments = filtered_comments
+
             # Analyze dependencies for this file
             language = file_info.get('language', '').lower()
             changes_content = '\n'.join(file_info.get('changes', []))
