@@ -101,6 +101,10 @@ class CodeReviewRequest(BaseModel):
     author: Optional[str] = None
     files_changed: Optional[List[str]] = None
     config: Optional[Dict[str, Any]] = None
+    # Bitbucket project context for full repository analysis
+    workspace: Optional[str] = None  # Bitbucket workspace name
+    repo_slug: Optional[str] = None  # Repository slug
+    analyze_full_project: Optional[bool] = False  # Whether to fetch and analyze full project context
 
     model_config = {
         "json_schema_extra": {
@@ -121,6 +125,9 @@ index 1234567..abcdef0 100644
                 "commit_sha": "abcdef0123456789",
                 "author": "developer@example.com",
                 "files_changed": ["example.py"],
+                "workspace": "your-workspace",
+                "repo_slug": "your-repo",
+                "analyze_full_project": True,
                 "config": {
                     "enabled_categories": ["bugs", "security", "performance"],
                     "severity_threshold": "low"
@@ -138,6 +145,7 @@ class CodeReviewResponse(BaseModel):
     recommendations: List[str]
     metadata: Optional[Dict[str, Any]] = None
     token_usage: Optional[TokenUsage] = None  # Overall token usage for entire review
+    project_impact_analysis: Optional[Dict[str, Any]] = None  # Full project context and impact analysis
 
 
 class ReviewConfig(BaseModel):

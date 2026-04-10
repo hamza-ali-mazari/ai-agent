@@ -7,6 +7,7 @@ from datetime import datetime
 from openai import AzureOpenAI
 from dotenv import load_dotenv
 from services.dependency_analyzer import DependencyAnalyzer
+from services.project_context_analyzer import project_analyzer
 from models.review import (
     CodeReviewRequest,
     CodeReviewResponse,
@@ -705,6 +706,12 @@ IMPORTANT NOTES:
         # Generate consolidated security analysis (one-time for all changes)
         security_analysis = self._generate_consolidated_security_analysis(all_comments)
 
+        # Analyze project impact if full project context is requested
+        project_impact_analysis = None
+        if request.analyze_full_project and request.workspace and request.repo_slug:
+            logger.info("Fetching full project context for impact analysis...")
+            project_impact_analysis = self._analyze_project_impact(request)
+
         # Generate overall feedback (non-repetitive)
         overall_feedback = self._generate_overall_feedback(summary, file_reviews, security_analysis)
 
@@ -725,13 +732,63 @@ IMPORTANT NOTES:
                 'analyzed_at': datetime.now().isoformat(),
                 'security_analysis': security_analysis
             },
-            token_usage=total_tokens
+            token_usage=total_tokens,
+            project_impact_analysis=project_impact_analysis
         )
 
         # Cache the result
         self.cache[cache_key] = response
 
         return response
+
+    def _analyze_project_impact(self, request: CodeReviewRequest) -> Dict[str, Any]:
+        """Fetch full project context and analyze impact of changes."""
+        try:
+            logger.info(f"Analyzing project impact for {request.workspace}/{request.repo_slug}")
+            
+            # Fetch all project files
+            all_files = project_analyzer.fetch_project_files(
+                workspace=request.workspace,
+                repo_slug=request.repo_slug,
+                branch=request.branch or "master"
+            )
+            
+            logger.info(f"Fetched {len(all_files)} files from repository")
+            
+            # Get changed files from request
+            changed_files = request.files_changed or []
+            if not changed_files:
+                # Try to extract from diff
+                files_info = self._parse_diff_files(request.diff)
+                changed_files = [f['path'] for f in files_info]
+            
+            # Analyze dependencies
+            dependency_analysis = project_analyzer.analyze_dependencies(
+                changed_files=changed_files,
+                all_files=all_files
+            )
+            
+            # Generate impact report
+            impact_report = project_analyzer.generate_impact_report(
+                changed_files=changed_files,
+                dependency_analysis=dependency_analysis
+            )
+            
+            logger.info(f"Project impact analysis complete - {len(dependency_analysis.get('affected_files', []))} files affected")
+            
+            return {
+                "all_files_count": len(all_files),
+                "changed_files": changed_files,
+                "dependency_analysis": dependency_analysis,
+                "impact_report": impact_report
+            }
+            
+        except Exception as e:
+            logger.error(f"Error analyzing project impact: {e}")
+            return {
+                "error": str(e),
+                "status": "failed"
+            }
 
     def _generate_consolidated_security_analysis(self, all_comments: List[ReviewComment]) -> Dict[str, Any]:
         """Generate rich, comprehensive security analysis with line-specific details and actionable insights."""
