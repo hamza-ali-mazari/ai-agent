@@ -1008,7 +1008,7 @@ IMPORTANT NOTES:
         breaking_changes: Dict[str, Any] = None,
         complexity: Dict[str, Any] = None,
         performance: Dict[str, Any] = None,
-        migrations: Dict[str, Any] = None,
+        migration_analysis: Dict[str, Any] = None,
         automated_fixes: List[Dict[str, Any]] = None,
         project_impact: Dict[str, Any] = None
     ) -> str:

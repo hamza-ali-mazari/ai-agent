@@ -114,9 +114,12 @@ class BitbucketIntegration:
         if self.kafka_handler:
             try:
                 self.kafka_handler.create_review_event(
+                    event_type="review:started",
+                    review_id=f"review_{datetime.now().isoformat()}",
                     pr_id=pr_id,
-                    repository=f"{workspace}/{repo_slug}",
-                    event_type="review:started"
+                    workspace=workspace,
+                    repo_slug=repo_slug,
+                    payload={"status": "analyzing"}
                 )
                 logger.info(f"Emitted review:started event for PR#{pr_id}")
             except Exception as e:
@@ -218,9 +221,12 @@ class BitbucketIntegration:
             if self.kafka_handler:
                 try:
                     self.kafka_handler.create_review_event(
+                        event_type="review:failed",
+                        review_id=f"review_{datetime.now().isoformat()}",
                         pr_id=pr_id,
-                        repository=f"{workspace}/{repo_slug}",
-                        event_type="review:failed"
+                        workspace=workspace,
+                        repo_slug=repo_slug,
+                        payload={"status": "failed", "error": str(e)}
                     )
                 except Exception as ex:
                     logger.warning(f"Failed to emit review:failed event: {str(ex)}")
