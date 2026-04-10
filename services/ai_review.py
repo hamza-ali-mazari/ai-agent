@@ -1004,8 +1004,6 @@ IMPORTANT NOTES:
                     feedback_parts.append(f"**{i}. {finding['title']}**")
                     feedback_parts.append(f"   📁 Location: `{finding['file']}:{finding['line']}`")
                     feedback_parts.append(f"   📝 Description: {finding['description']}")
-                    if finding['suggestion']:
-                        feedback_parts.append(f"   ✅ Fix: {finding['suggestion']}")
                     if finding.get('impact'):
                         feedback_parts.append(f"   ⚠️ Impact: {finding['impact']}")
                     feedback_parts.append("")
@@ -1019,8 +1017,6 @@ IMPORTANT NOTES:
                     feedback_parts.append(f"**{i}. {finding['title']}**")
                     feedback_parts.append(f"   📁 Location: `{finding['file']}:{finding['line']}`")
                     feedback_parts.append(f"   📝 Description: {finding['description']}")
-                    if finding['suggestion']:
-                        feedback_parts.append(f"   ✅ Fix: {finding['suggestion']}")
                     if finding.get('impact'):
                         feedback_parts.append(f"   ⚠️ Impact: {finding['impact']}")
                     feedback_parts.append("")
