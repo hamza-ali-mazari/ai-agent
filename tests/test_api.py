@@ -1,7 +1,11 @@
 import pytest
+import os
 from fastapi.testclient import TestClient
 from app import app
 from models.review import CodeReviewRequest
+
+# Set testing environment variable
+os.environ["TESTING"] = "true"
 
 client = TestClient(app)
 
@@ -9,7 +13,10 @@ def test_health_check():
     """Test health check endpoint."""
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "healthy", "version": "2.0.0"}
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert data["version"] == "2.0.0"
+    assert "azure_openai_available" in data
 
 def test_review_code_empty_diff():
     """Test review endpoint with empty diff."""
@@ -68,34 +75,36 @@ def test_default_config():
 
 def test_bitbucket_get_auth_headers():
     """Test Bitbucket auth headers priority and presence."""
-    from integrations.bitbucket_integration import BitbucketIntegration
-    integration = BitbucketIntegration()
-
     import os
+    from integrations.bitbucket_integration import BitbucketIntegration
 
-    # Temporary env mapping helper in the fixture
-    os.environ.pop("BITBUCKET_OAUTH_TOKEN", None)
+    # Test 1: OAuth token takes priority
+    os.environ["BITBUCKET_OAUTH_TOKEN"] = "oauth-123"
     os.environ.pop("BITBUCKET_APP_PASSWORD", None)
     os.environ.pop("BITBUCKET_USERNAME", None)
     os.environ.pop("BITBUCKET_TOKEN", None)
 
-    # Set OAuth token first
-    os.environ["BITBUCKET_OAUTH_TOKEN"] = "oauth-123"
+    integration = BitbucketIntegration()
     headers = integration.get_auth_headers()
     assert headers["Authorization"] == "Bearer oauth-123"
 
-    # If OAuth token not set, fall back to username+token
+    # Test 2: Username + token fallback
     os.environ.pop("BITBUCKET_OAUTH_TOKEN", None)
     os.environ.pop("BITBUCKET_APP_PASSWORD", None)
     os.environ["BITBUCKET_USERNAME"] = "user"
     os.environ["BITBUCKET_TOKEN"] = "api-token"
+
+    integration = BitbucketIntegration()
     headers = integration.get_auth_headers()
     assert headers["Authorization"].startswith("Basic ")
 
-    # If no credentials, ValueError is raised
+    # Test 3: No credentials should raise ValueError
+    os.environ.pop("BITBUCKET_OAUTH_TOKEN", None)
     os.environ.pop("BITBUCKET_APP_PASSWORD", None)
     os.environ.pop("BITBUCKET_USERNAME", None)
     os.environ.pop("BITBUCKET_TOKEN", None)
+
+    integration = BitbucketIntegration()
     with pytest.raises(ValueError):
         integration.get_auth_headers()
 

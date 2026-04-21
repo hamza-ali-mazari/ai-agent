@@ -10,6 +10,7 @@ import hmac
 import hashlib
 import json
 import requests
+from datetime import datetime
 from typing import Dict, Any, Optional, List
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -48,8 +49,16 @@ class BitbucketIntegration:
 
         if self.bitbucket_oauth_token:
             headers["Authorization"] = f"Bearer {self.bitbucket_oauth_token}"
+        elif self.bitbucket_username and (self.bitbucket_token or self.bitbucket_app_password):
+            # Basic auth for username + token/app password
+            import base64
+            credentials = f"{self.bitbucket_username}:{self.bitbucket_token or self.bitbucket_app_password}"
+            encoded_credentials = base64.b64encode(credentials.encode()).decode()
+            headers["Authorization"] = f"Basic {encoded_credentials}"
         elif self.bitbucket_token and not self.bitbucket_username:
             headers["Authorization"] = f"Bearer {self.bitbucket_token}"
+        else:
+            raise ValueError("No Bitbucket authentication credentials configured")
 
         return headers
 
@@ -165,10 +174,10 @@ class BitbucketIntegration:
             if self.kafka_handler:
                 try:
                     self.kafka_handler.create_analysis_complete_event(
+                        review_id=f"review_{datetime.now().isoformat()}",
                         pr_id=pr_id,
-                        repository=f"{workspace}/{repo_slug}",
-                        analysis_complete=True,
-                        has_critical_issues=has_critical,
+                        workspace=workspace,
+                        repo_slug=repo_slug,
                         summary=summary
                     )
                     logger.info(f"Emitted review:analysis_complete event for PR#{pr_id}")
