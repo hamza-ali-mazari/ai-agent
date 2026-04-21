@@ -153,6 +153,7 @@ class CodeReviewResponse(BaseModel):
     complexity_analysis: Optional[Dict[str, Any]] = None  # Code complexity metrics
     performance_analysis: Optional[Dict[str, Any]] = None  # Performance antipatterns
     migration_analysis: Optional[Dict[str, Any]] = None  # Database migration analysis
+    code_smells_analysis: Optional[Dict[str, Any]] = None  # Code smells and anti-patterns detection
     automated_fixes: Optional[List[Dict[str, Any]]] = None  # Automated fix code suggestions
 
 

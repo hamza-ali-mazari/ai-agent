@@ -13,6 +13,7 @@ from services.breaking_changes_detector import breaking_changes_detector
 from services.complexity_analyzer import complexity_analyzer
 from services.performance_analyzer import performance_analyzer
 from services.migration_analyzer import migration_analyzer, fix_generator
+from services.code_smells_analyzer import code_smells_analyzer
 from models.review import (
     CodeReviewRequest,
     CodeReviewResponse,
@@ -725,6 +726,7 @@ IMPORTANT NOTES:
         complexity_analysis = complexity_analyzer.analyze_complexity(files_info)
         performance_analysis = performance_analyzer.analyze_performance(files_info)
         migration_analysis = migration_analyzer.analyze_migrations(files_info)
+        code_smells_analysis = code_smells_analyzer.analyze_code_smells(files_info)
 
         # Generate automated fix suggestions for top issues
         top_issues = []
@@ -749,7 +751,7 @@ IMPORTANT NOTES:
             test_coverage_analysis, breaking_changes_analysis,
             complexity_analysis, performance_analysis,
             migration_analysis, automated_fixes,
-            project_impact_analysis
+            project_impact_analysis, code_smells_analysis
         )
 
         # Generate recommendations
@@ -777,7 +779,8 @@ IMPORTANT NOTES:
             complexity_analysis=complexity_analysis,
             performance_analysis=performance_analysis,
             migration_analysis=migration_analysis,
-            automated_fixes=automated_fixes
+            automated_fixes=automated_fixes,
+            code_smells_analysis=code_smells_analysis
         )
 
         # Cache the result
@@ -1010,7 +1013,8 @@ IMPORTANT NOTES:
         performance: Dict[str, Any] = None,
         migration_analysis: Dict[str, Any] = None,
         automated_fixes: List[Dict[str, Any]] = None,
-        project_impact: Dict[str, Any] = None
+        project_impact: Dict[str, Any] = None,
+        code_smells: Dict[str, Any] = None
     ) -> str:
         """Generate Code Rabbit style detailed analysis with prominent token tracking."""
         if summary.analysis_errors > 0:
@@ -1309,6 +1313,66 @@ IMPORTANT NOTES:
             feedback_parts.append("### ✅ Database Migrations Check")
             feedback_parts.append("**Status:** No database migrations detected")
             feedback_parts.append("**Result:** No migration-related issues")
+            feedback_parts.append("")
+
+        # CODE SMELLS ANALYSIS SECTION
+        feedback_parts.append("---")
+        feedback_parts.append("")
+        if code_smells and code_smells.get('has_smells'):
+            feedback_parts.append(f"### 👃 Code Smells & Anti-Patterns")
+            feedback_parts.append(f"**Total Issues Found:** {code_smells.get('total_smells_found', 0)}")
+            feedback_parts.append("")
+            
+            # Severity breakdown
+            severity = code_smells.get('severity_breakdown', {})
+            if severity.get('critical', 0) > 0 or severity.get('high', 0) > 0:
+                feedback_parts.append("**Severity Breakdown:**")
+                if severity.get('critical', 0) > 0:
+                    feedback_parts.append(f"- 🔴 **Critical:** {severity['critical']} code smell(s)")
+                if severity.get('high', 0) > 0:
+                    feedback_parts.append(f"- 🟠 **High:** {severity['high']} issue(s)")
+                if severity.get('medium', 0) > 0:
+                    feedback_parts.append(f"- 🟡 **Medium:** {severity['medium']} issue(s)")
+                if severity.get('low', 0) > 0:
+                    feedback_parts.append(f"- 🔵 **Low:** {severity['low']} suggestion(s)")
+                feedback_parts.append("")
+            
+            # Categories breakdown
+            smells_by_cat = code_smells.get('smells_by_category', {})
+            if smells_by_cat:
+                feedback_parts.append("**Issues by Category:**")
+                for category, smells_list in sorted(smells_by_cat.items(), key=lambda x: len(x[1]), reverse=True)[:5]:
+                    count = len(smells_list) if isinstance(smells_list, list) else smells_list
+                    feedback_parts.append(f"- **{category.replace('_', ' ').title()}:** {count}")
+                feedback_parts.append("")
+            
+            # Critical smells if any
+            critical_smells = code_smells.get('critical_smells', [])
+            if critical_smells:
+                feedback_parts.append("**🔴 Critical Code Smells:**")
+                for smell in critical_smells[:3]:
+                    feedback_parts.append(f"- **{smell.get('title', 'Issue')}** ({smell.get('type', 'unknown')})")
+                    feedback_parts.append(f"  📁 Line {smell.get('line', 'unknown')}: {smell.get('description', '')}")
+                    feedback_parts.append(f"  💡 Fix: {smell.get('suggestion', 'Refactor needed')}")
+                feedback_parts.append("")
+            
+            # High smells
+            high_smells = code_smells.get('high_smells', [])
+            if high_smells:
+                feedback_parts.append("**⚠️ High Priority Code Smells:**")
+                for smell in high_smells[:2]:
+                    feedback_parts.append(f"- **{smell.get('title', 'Issue')}** (Line {smell.get('line', '?')})")
+                    feedback_parts.append(f"  💡 {smell.get('suggestion', 'Needs attention')}")
+                feedback_parts.append("")
+            
+            # Recommendations
+            for rec in code_smells.get('recommendations', []):
+                feedback_parts.append(f"📋 {rec}")
+            feedback_parts.append("")
+        else:
+            feedback_parts.append("### ✅ Code Smells Check")
+            feedback_parts.append("**Status:** No significant code smells detected")
+            feedback_parts.append("**Result:** Code follows best practices and avoids common anti-patterns")
             feedback_parts.append("")
 
         # PROJECT IMPACT ANALYSIS SECTION (ALWAYS SHOW)
