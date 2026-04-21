@@ -135,7 +135,7 @@ class BitbucketIntegration:
                 logger.warning(f"Failed to emit review:started event: {str(e)}")
 
         try:
-            # Get PR diff
+            # Get PR diff (for reference)
             logger.info(f"Getting diff for PR #{pr_id}")
             diff_content = self.get_pull_request_diff(workspace, repo_slug, pr_id)
             if not diff_content:
@@ -143,23 +143,31 @@ class BitbucketIntegration:
                 return
             logger.info(f"Got diff content, length: {len(diff_content)}")
 
-            # Get all files in PR (for comprehensive review)
-            logger.info(f"Getting PR files for PR #{pr_id}")
-            pr_files = self.get_pull_request_files(workspace, repo_slug, pr_id)
-            logger.info(f"Got {len(pr_files)} files in PR")
+            # IMPORTANT: Get ALL files with full content (for comprehensive analysis)
+            # This ensures the reviewer analyzes complete files, not just changed lines
+            logger.info(f"Getting PR files with FULL CONTENT for comprehensive analysis")
+            pr_files_with_content = self.get_pull_request_files_with_content(workspace, repo_slug, pr_id)
+            logger.info(f"Got {len(pr_files_with_content)} files with full content for comprehensive analysis")
+            
+            if not pr_files_with_content:
+                logger.warning(f"No files with content for PR #{pr_id}")
+                return
 
-            # Prepare review request
+            # Prepare review request with FULL FILE CONTENT (not just diffs)
             review_request = {
-                "diff": diff_content,
+                "diff": diff_content,  # Keep for compatibility, but comprehensive analysis uses full files
+                "full_files": pr_files_with_content,  # NEW: Pass complete file content for thorough analysis
                 "repository_url": f"https://bitbucket.org/{workspace}/{repo_slug}",
                 "branch": pr["source"]["branch"]["name"],
                 "commit_sha": pr["source"]["commit"]["hash"],
                 "author": pr["author"]["display_name"],
-                "files_changed": pr_files,
+                "files_changed": [f["path"] for f in pr_files_with_content],  # List of changed file paths
+                "analyze_complete_files": True,  # NEW: Flag to analyze complete files
                 "config": {
-                    "enabled_categories": ["bugs", "security", "performance", "maintainability"],
+                    "enabled_categories": ["bugs", "security", "performance", "maintainability", "best_practices"],
                     "severity_threshold": "info",
-                    "max_comments_per_file": 5
+                    "max_comments_per_file": 10,  # Increased to get more comprehensive feedback
+                    "comprehensive_analysis": True  # NEW: Enable comprehensive security & code quality analysis
                 }
             }
 
@@ -286,6 +294,115 @@ class BitbucketIntegration:
         except Exception as e:
             logger.error(f"Error getting PR files: {str(e)}")
             return []
+
+    def get_pull_request_files_with_content(self, workspace: str, repo_slug: str, pr_id: int) -> List[Dict[str, Any]]:
+        """Get all files changed in the PR with full content for comprehensive analysis."""
+        # First get the list of changed files
+        pr_url = f"{self.api_base}/repositories/{workspace}/{repo_slug}/pullrequests/{pr_id}"
+        headers = self.get_auth_headers()
+        auth = self.get_auth()
+        
+        try:
+            response = requests.get(pr_url, headers=headers, auth=auth)
+            if response.status_code != 200:
+                logger.warning(f"Failed to get PR details: {response.status_code}")
+                return []
+            
+            pr_data = response.json()
+            destination_commit = pr_data.get("destination", {}).get("commit", {}).get("hash", "")
+            source_commit = pr_data.get("source", {}).get("commit", {}).get("hash", "")
+            
+            if not destination_commit or not source_commit:
+                logger.warning("Could not get commit hashes from PR data")
+                return []
+            
+            # Get the diffstat to see which files changed
+            diffstat_url = f"{self.api_base}/repositories/{workspace}/{repo_slug}/pullrequests/{pr_id}/diffstat"
+            diffstat_response = requests.get(diffstat_url, headers=headers, auth=auth)
+            
+            if diffstat_response.status_code != 200:
+                logger.warning(f"Failed to get diffstat: {diffstat_response.status_code}")
+                return []
+            
+            diffstat_data = diffstat_response.json()
+            files_with_content = []
+            
+            for item in diffstat_data.get("values", []):
+                if not item.get("new"):
+                    continue
+                
+                file_path = item["new"]["path"]
+                
+                # Skip binary files and large files
+                if self._is_binary_file(file_path):
+                    logger.info(f"Skipping binary file: {file_path}")
+                    continue
+                
+                # Get file content from source commit
+                file_content = self.get_file_content(workspace, repo_slug, source_commit, file_path)
+                
+                if file_content is not None:
+                    # Detect language from file extension
+                    language = self._detect_language(file_path)
+                    
+                    files_with_content.append({
+                        "path": file_path,
+                        "content": file_content,
+                        "language": language,
+                        "status": item.get("status", "modified")
+                    })
+                    logger.info(f"Fetched content for: {file_path} ({language})")
+                else:
+                    logger.warning(f"Failed to fetch content for: {file_path}")
+            
+            return files_with_content
+            
+        except Exception as e:
+            logger.error(f"Error getting PR files with content: {str(e)}")
+            return []
+
+    def get_file_content(self, workspace: str, repo_slug: str, commit_hash: str, file_path: str) -> Optional[str]:
+        """Get the content of a specific file from a commit."""
+        url = f"{self.api_base}/repositories/{workspace}/{repo_slug}/src/{commit_hash}/{file_path}"
+        headers = self.get_auth_headers()
+        auth = self.get_auth()
+        
+        try:
+            response = requests.get(url, headers=headers, auth=auth)
+            if response.status_code == 200:
+                return response.text
+            else:
+                logger.warning(f"Failed to get file content: {response.status_code} - {file_path}")
+                return None
+        except Exception as e:
+            logger.warning(f"Error getting file content for {file_path}: {str(e)}")
+            return None
+
+    def _is_binary_file(self, file_path: str) -> bool:
+        """Check if file is binary based on extension."""
+        binary_extensions = {
+            '.pyc', '.pyo', '.so', '.o', '.a', '.lib', '.dll', '.exe',
+            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico',
+            '.pdf', '.zip', '.tar', '.gz', '.rar', '.7z',
+            '.mp3', '.mp4', '.avi', '.mov', '.wav',
+            '.class', '.jar', '.war', '.ear'
+        }
+        return any(file_path.endswith(ext) for ext in binary_extensions)
+
+    def _detect_language(self, file_path: str) -> str:
+        """Detect programming language from file extension."""
+        ext_map = {
+            '.py': 'python', '.js': 'javascript', '.ts': 'typescript',
+            '.java': 'java', '.cpp': 'cpp', '.c': 'c', '.cs': 'csharp',
+            '.go': 'go', '.rs': 'rust', '.rb': 'ruby', '.php': 'php',
+            '.sql': 'sql', '.html': 'html', '.css': 'css', '.json': 'json',
+            '.yaml': 'yaml', '.yml': 'yaml', '.xml': 'xml', '.sh': 'shell',
+            '.ps1': 'powershell', '.tsx': 'typescript', '.jsx': 'javascript'
+        }
+        for ext, lang in ext_map.items():
+            if file_path.endswith(ext):
+                return lang
+        return 'unknown'
 
     async def call_review_engine(self, review_request: Dict[str, Any]) -> Dict[str, Any]:
         """Call the AI review engine directly."""

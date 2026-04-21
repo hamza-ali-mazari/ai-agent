@@ -105,6 +105,9 @@ class CodeReviewRequest(BaseModel):
     workspace: Optional[str] = None  # Bitbucket workspace name
     repo_slug: Optional[str] = None  # Repository slug
     analyze_full_project: Optional[bool] = False  # Whether to fetch and analyze full project context
+    # NEW: Comprehensive file analysis
+    full_files: Optional[List[Dict[str, Any]]] = None  # List of files with complete content {path, content, language}
+    analyze_complete_files: Optional[bool] = False  # Whether to analyze complete file content (not just diffs)
 
     model_config = {
         "json_schema_extra": {

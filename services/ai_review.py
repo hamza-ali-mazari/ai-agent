@@ -229,10 +229,25 @@ class AICodeReviewEngine:
                 return lang
         return 'unknown'
 
-    def _generate_review_prompt(self, file_info: Dict[str, Any], config: ReviewConfig) -> str:
+    def _generate_review_prompt(self, file_info: Dict[str, Any], config: ReviewConfig, analyze_complete: bool = False) -> str:
         """Generate sophisticated review prompt for AI."""
         language = file_info.get('language', 'unknown')
-        changes = '\n'.join(file_info.get('changes', []))
+        
+        # Use complete content if analyzing full files, otherwise use changes
+        if analyze_complete and 'content' in file_info:
+            code_to_review = file_info.get('content', '')
+            analysis_scope = "COMPLETE FILE ANALYSIS"
+            code_section = f"""COMPLETE FILE CONTENT (Comprehensive Review):
+```{language}
+{code_to_review}
+```"""
+        else:
+            changes = '\n'.join(file_info.get('changes', []))
+            analysis_scope = "CHANGED LINES ANALYSIS"
+            code_section = f"""CODE CHANGES (Diff):
+```diff
+{changes}
+```"""
 
         categories = [cat.value for cat in config.enabled_categories]
 
@@ -240,21 +255,32 @@ class AICodeReviewEngine:
 
 FILE: {file_info['path']}
 LANGUAGE: {language}
+ANALYSIS SCOPE: {analysis_scope}
 
 REVIEW REQUIREMENTS:
-Analyze the following code changes and provide detailed, actionable feedback. You are reviewing code in {language.upper()}, so consider language-specific best practices, idioms, and common pitfalls.
+Analyze the following code and provide detailed, actionable feedback. You are reviewing code in {language.upper()}, so consider language-specific best practices, idioms, and common pitfalls.
 
 Focus on these categories: {', '.join(categories)}
+
+COMPREHENSIVE ANALYSIS INSTRUCTIONS:
+Since this is a {analysis_scope}, perform a THOROUGH review that includes:
+1. **Security vulnerabilities** - hardcoded secrets, SQL injection, XSS, authentication issues
+2. **Code smells** - duplicated code, long functions, deep nesting, poor naming
+3. **Best practices** - proper error handling, input validation, logging
+4. **Performance issues** - inefficient algorithms, memory leaks, unnecessary operations
+5. **Maintainability** - code clarity, documentation, test coverage
+6. **Design patterns** - use appropriate patterns, avoid anti-patterns
 
 SECURITY SCANNING REQUIREMENTS:
 Perform a comprehensive security analysis for:
 - SQL Injection vulnerabilities (unsafe string concatenation in queries)
 - XSS (Cross-Site Scripting) attacks (unsafe HTML output, user input in DOM)
-- Hardcoded secrets (API keys, passwords, tokens in source code)
+- Hardcoded secrets (API keys, passwords, tokens, database credentials in source code)
 - Unsafe API usage (deprecated functions, insecure defaults)
 - Authentication/authorization issues (missing auth checks, weak auth)
 - Data validation issues (missing input sanitization)
 - Cryptographic weaknesses (weak algorithms, improper key management)
+- Exposed configuration data (hardcoded endpoints, credentials)
 
 For each issue found, provide:
 1. CATEGORY: One of {', '.join(categories)}
@@ -269,10 +295,7 @@ For each issue found, provide:
 10. MINIMAL_TEST: A minimal unit test or security test that validates the fix
 11. REFERENCES: Security standards, OWASP guidelines, or best practices that apply
 
-CODE CHANGES:
-```diff
-{changes}
-```
+{code_section}
 
 LANGUAGE-SPECIFIC GUIDANCE:
 - For compiled languages (Java, C++, C#, Go, Rust): Focus on performance, memory management, type safety, secure coding practices
@@ -586,8 +609,14 @@ IMPORTANT NOTES:
             logger.info("Returning cached review result")
             return self.cache[cache_key]
 
-        # Parse diff into files
-        files_info = self._parse_diff_files(request.diff)
+        # COMPREHENSIVE ANALYSIS: Use complete file content if provided (analyzes entire files)
+        # Otherwise fall back to diff-based analysis (only changed lines)
+        if request.full_files and request.analyze_complete_files:
+            logger.info("Analyzing COMPLETE file content (comprehensive security & code quality review)")
+            files_info = request.full_files
+        else:
+            logger.info("Analyzing git diff (changed lines only)")
+            files_info = self._parse_diff_files(request.diff)
         file_reviews = []
         all_comments = []
         total_tokens = TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
@@ -596,7 +625,9 @@ IMPORTANT NOTES:
             logger.info(f"Analyzing file: {file_info['path']}")
 
             # Generate prompt and call AI
-            prompt = self._generate_review_prompt(file_info, config)
+            # Pass analyze_complete flag to tell the model whether we're analyzing complete files or just diffs
+            analyze_complete = request.analyze_complete_files and request.full_files is not None
+            prompt = self._generate_review_prompt(file_info, config, analyze_complete=analyze_complete)
             ai_response, file_tokens = self._call_ai_model(prompt)
             
             # Accumulate tokens
