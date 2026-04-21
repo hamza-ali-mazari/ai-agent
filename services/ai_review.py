@@ -1118,12 +1118,16 @@ IMPORTANT NOTES:
         total_sec_issues = security_analysis.get('total_security_issues', 0)
         risk_score = security_analysis.get('risk_score', 100)
         
+        # Ensure risk_score is realistic - if there are issues, it should not be 100
+        if total_sec_issues > 0 and risk_score >= 95:
+            risk_score = max(0, 100 - (total_sec_issues * 10))  # Recalculate if unrealistic
+        
         # Security Status Card
         feedback_parts.append(f"### 🛡️ Security Assessment")
         feedback_parts.append(f"{security_posture}")
         feedback_parts.append("")
         
-        # Risk Score Gauge
+        # Risk Score Gauge with accurate percentage
         if risk_score >= 80:
             gauge = "████████████████████ (Secure)"
         elif risk_score >= 60:
@@ -1133,7 +1137,7 @@ IMPORTANT NOTES:
         else:
             gauge = "████░░░░░░░░░░░░░░░░ (Critical)"
         
-        feedback_parts.append(f"**Risk Score:** {risk_score}/100 | {gauge}")
+        feedback_parts.append(f"**Risk Score:** {int(risk_score)}/100 | {gauge}")
         feedback_parts.append("")
 
         if total_sec_issues > 0:
@@ -1141,7 +1145,7 @@ IMPORTANT NOTES:
             patterns = security_analysis.get('patterns', [])
             if patterns:
                 feedback_parts.append("**Vulnerability Patterns Detected:**")
-                for pattern in patterns[:5]:
+                for pattern in patterns[:3]:  # Reduced from 5 to 3 to avoid repetition
                     feedback_parts.append(f"• {pattern}")
                 feedback_parts.append("")
 
@@ -1150,7 +1154,7 @@ IMPORTANT NOTES:
             if critical_findings:
                 feedback_parts.append("**🚨 Critical Security Issues (Must Fix):**")
                 feedback_parts.append("")
-                for i, finding in enumerate(critical_findings[:5], 1):
+                for i, finding in enumerate(critical_findings[:3], 1):  # Reduced from 5 to 3
                     feedback_parts.append(f"**{i}. {finding['title']}**")
                     feedback_parts.append(f"   📁 Location: `{finding['file']}:{finding['line']}`")
                     feedback_parts.append(f"   📝 Description: {finding['description']}")
@@ -1163,7 +1167,7 @@ IMPORTANT NOTES:
             if high_findings:
                 feedback_parts.append("**⚠️ High Priority Security Issues:**")
                 feedback_parts.append("")
-                for i, finding in enumerate(high_findings[:5], 1):
+                for i, finding in enumerate(high_findings[:2], 1):  # Reduced from 5 to 2
                     feedback_parts.append(f"**{i}. {finding['title']}**")
                     feedback_parts.append(f"   📁 Location: `{finding['file']}:{finding['line']}`")
                     feedback_parts.append(f"   📝 Description: {finding['description']}")
@@ -1396,15 +1400,18 @@ IMPORTANT NOTES:
                     feedback_parts.append(f"  💡 {smell.get('suggestion', 'Needs attention')}")
                 feedback_parts.append("")
             
-            # Recommendations
-            for rec in code_smells.get('recommendations', []):
-                feedback_parts.append(f"📋 {rec}")
-            feedback_parts.append("")
+            # Recommendations (only first 2 to avoid repetition)
+            recommendations_list = code_smells.get('recommendations', [])
+            if recommendations_list:
+                feedback_parts.append("**Recommendations:**")
+                for rec in recommendations_list[:2]:
+                    feedback_parts.append(f"📋 {rec}")
+                feedback_parts.append("")
         else:
             feedback_parts.append("### ✅ Code Smells Check")
             feedback_parts.append("**Status:** No significant code smells detected")
-            feedback_parts.append("**Result:** Code follows best practices and avoids common anti-patterns")
             feedback_parts.append("")
+
 
         # PROJECT IMPACT ANALYSIS SECTION (ALWAYS SHOW)
         feedback_parts.append("---")
@@ -1509,6 +1516,100 @@ IMPORTANT NOTES:
                 feedback_parts.append("")
 
         # FINAL TOKEN TRACKER STATS
+        feedback_parts.append("---")
+        feedback_parts.append("")
+        
+        # BAD PRACTICES SUMMARY & CODE FIXES SECTION
+        all_issues = []
+        for file in files:
+            for comment in file.comments:
+                all_issues.append({
+                    'file': file.file_path,
+                    'category': comment.category.value,
+                    'severity': comment.severity.value,
+                    'title': comment.title,
+                    'description': comment.description,
+                    'suggestion': comment.suggestion,
+                    'inline_suggestion': comment.inline_suggestion,
+                    'code_example': comment.code_example,
+                    'line': comment.location.line_start if comment.location else 'N/A'
+                })
+        
+        # Group by category
+        issues_by_category = {}
+        for issue in all_issues:
+            cat = issue['category']
+            if cat not in issues_by_category:
+                issues_by_category[cat] = []
+            issues_by_category[cat].append(issue)
+        
+        if issues_by_category:
+            feedback_parts.append("### 🐛 Code Issues Summary & Fixes")
+            feedback_parts.append("")
+            
+            # Sort categories by number of issues (descending)
+            sorted_categories = sorted(issues_by_category.items(), key=lambda x: len(x[1]), reverse=True)
+            
+            for category, issues in sorted_categories[:6]:  # Top 6 categories
+                category_count = len(issues)
+                category_emoji = {
+                    'security': '🔒',
+                    'bugs': '🐛',
+                    'performance': '⚡',
+                    'maintainability': '🏗️',
+                    'style': '🎨',
+                    'best_practices': '✨',
+                    'testing': '🧪',
+                    'documentation': '📖'
+                }
+                emoji = category_emoji.get(category, '•')
+                
+                feedback_parts.append(f"#### {emoji} {category.upper()} ({category_count} issue(s))")
+                feedback_parts.append("")
+                
+                # Show top 2 issues from this category
+                for issue in issues[:2]:
+                    severity_indicator = {
+                        'critical': '🔴',
+                        'high': '🟠',
+                        'medium': '🟡',
+                        'low': '🔵',
+                        'info': 'ℹ️'
+                    }
+                    sev_emoji = severity_indicator.get(issue['severity'], '•')
+                    
+                    feedback_parts.append(f"**{sev_emoji} {issue['title']}** (Line {issue['line']})")
+                    feedback_parts.append(f"📝 Problem: {issue['description']}")
+                    feedback_parts.append("")
+                    
+                    # Show code fix if available
+                    if issue.get('inline_suggestion'):
+                        feedback_parts.append("**Fix:**")
+                        feedback_parts.append("```python")
+                        feedback_parts.append(issue['inline_suggestion'])
+                        feedback_parts.append("```")
+                        feedback_parts.append("")
+                    elif issue.get('code_example'):
+                        feedback_parts.append("**Example Fix:**")
+                        feedback_parts.append(issue['code_example'])
+                        feedback_parts.append("")
+                    
+                    # Show suggestion
+                    if issue.get('suggestion'):
+                        feedback_parts.append(f"💡 **Suggestion:** {issue['suggestion']}")
+                        feedback_parts.append("")
+                
+                # Summary for category
+                remaining = category_count - 2
+                if remaining > 0:
+                    feedback_parts.append(f"📌 *... and {remaining} more {category} issue(s) (see detailed comments above)*")
+                feedback_parts.append("")
+        else:
+            feedback_parts.append("### ✅ Code Quality")
+            feedback_parts.append("**Status:** No code issues detected")
+            feedback_parts.append("")
+        
+        # ANALYSIS EXECUTION STATS
         feedback_parts.append("---")
         feedback_parts.append("")
         feedback_parts.append("### 💻 Analysis Execution Stats")
