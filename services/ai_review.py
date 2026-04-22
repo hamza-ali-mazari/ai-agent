@@ -784,20 +784,24 @@ IMPORTANT NOTES:
             request.repo_slug = repo_slug
             project_impact_analysis = self._analyze_project_impact(request)
 
+        # Generate review ID first so it can be included in feedback
+        review_id = f"review_{datetime.now().isoformat()}"
+        
         # Generate overall feedback (non-repetitive)
         overall_feedback = self._generate_overall_feedback(
             summary, file_reviews, security_analysis,
             test_coverage_analysis, breaking_changes_analysis,
             complexity_analysis, performance_analysis,
             migration_analysis, automated_fixes,
-            project_impact_analysis, code_smells_analysis
+            project_impact_analysis, code_smells_analysis,
+            review_id=review_id
         )
 
         # Generate recommendations
         recommendations = self._generate_recommendations(summary, file_reviews)
 
         response = CodeReviewResponse(
-            review_id=f"review_{datetime.now().isoformat()}",
+            review_id=review_id,
             summary=summary,
             files=file_reviews,
             overall_feedback=overall_feedback,
@@ -1053,7 +1057,8 @@ IMPORTANT NOTES:
         migration_analysis: Dict[str, Any] = None,
         automated_fixes: List[Dict[str, Any]] = None,
         project_impact: Dict[str, Any] = None,
-        code_smells: Dict[str, Any] = None
+        code_smells: Dict[str, Any] = None,
+        review_id: str = None
     ) -> str:
         """Generate Code Rabbit style detailed analysis with prominent token tracking."""
         if summary.analysis_errors > 0:
@@ -1069,6 +1074,24 @@ IMPORTANT NOTES:
         # CODE RABBIT STYLE HEADER WITH TOKEN INFO
         feedback_parts.append("## 📋 Code Review Analysis")
         feedback_parts.append("")
+        
+        # Chat Link Section (Prominent at Top)
+        if review_id:
+            feedback_parts.append("### 💬 Chat with AI About This Review")
+            feedback_parts.append(f"**Review ID:** `{review_id}`")
+            feedback_parts.append("")
+            feedback_parts.append("#### Quick Access Options:")
+            feedback_parts.append(f"- 🔗 **[Open Chat Interface](https://your-app.onrender.com/chat?id={review_id})** - Paste this Review ID to start chatting")
+            feedback_parts.append(f"- 📋 **Review ID to Use:** `{review_id}`")
+            feedback_parts.append("")
+            feedback_parts.append("Ask me anything about:")
+            feedback_parts.append("- 🔒 Security vulnerabilities and fixes")
+            feedback_parts.append("- ⚡ Code quality improvements")
+            feedback_parts.append("- 🚀 Performance optimizations")
+            feedback_parts.append("- ✨ Best practices and patterns")
+            feedback_parts.append("")
+            feedback_parts.append("---")
+            feedback_parts.append("")
         
         # Token Tracker Summary Card (Prominent at Top)
         if summary.tokens_used:
