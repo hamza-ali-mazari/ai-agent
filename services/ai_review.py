@@ -1519,99 +1519,11 @@ IMPORTANT NOTES:
         feedback_parts.append("---")
         feedback_parts.append("")
         
-        # BAD PRACTICES SUMMARY & CODE FIXES SECTION
-        all_issues = []
-        for file in files:
-            for comment in file.comments:
-                all_issues.append({
-                    'file': file.file_path,
-                    'category': comment.category.value,
-                    'severity': comment.severity.value,
-                    'title': comment.title,
-                    'description': comment.description,
-                    'suggestion': comment.suggestion,
-                    'inline_suggestion': comment.inline_suggestion,
-                    'code_example': comment.code_example,
-                    'line': comment.location.line_start if comment.location else 'N/A'
-                })
-        
-        # Group by category
-        issues_by_category = {}
-        for issue in all_issues:
-            cat = issue['category']
-            if cat not in issues_by_category:
-                issues_by_category[cat] = []
-            issues_by_category[cat].append(issue)
-        
-        if issues_by_category:
-            feedback_parts.append("### 🐛 Code Issues Summary & Fixes")
-            feedback_parts.append("")
-            
-            # Sort categories by number of issues (descending)
-            sorted_categories = sorted(issues_by_category.items(), key=lambda x: len(x[1]), reverse=True)
-            
-            for category, issues in sorted_categories[:6]:  # Top 6 categories
-                category_count = len(issues)
-                category_emoji = {
-                    'security': '🔒',
-                    'bugs': '🐛',
-                    'performance': '⚡',
-                    'maintainability': '🏗️',
-                    'style': '🎨',
-                    'best_practices': '✨',
-                    'testing': '🧪',
-                    'documentation': '📖'
-                }
-                emoji = category_emoji.get(category, '•')
-                
-                feedback_parts.append(f"#### {emoji} {category.upper()} ({category_count} issue(s))")
-                feedback_parts.append("")
-                
-                # Show top 2 issues from this category
-                for issue in issues[:2]:
-                    severity_indicator = {
-                        'critical': '🔴',
-                        'high': '🟠',
-                        'medium': '🟡',
-                        'low': '🔵',
-                        'info': 'ℹ️'
-                    }
-                    sev_emoji = severity_indicator.get(issue['severity'], '•')
-                    
-                    feedback_parts.append(f"**{sev_emoji} {issue['title']}** (Line {issue['line']})")
-                    feedback_parts.append(f"📝 Problem: {issue['description']}")
-                    feedback_parts.append("")
-                    
-                    # Show code fix if available
-                    if issue.get('inline_suggestion'):
-                        feedback_parts.append("**Fix:**")
-                        feedback_parts.append("```python")
-                        feedback_parts.append(issue['inline_suggestion'])
-                        feedback_parts.append("```")
-                        feedback_parts.append("")
-                    elif issue.get('code_example'):
-                        feedback_parts.append("**Example Fix:**")
-                        feedback_parts.append(issue['code_example'])
-                        feedback_parts.append("")
-                    
-                    # Show suggestion
-                    if issue.get('suggestion'):
-                        feedback_parts.append(f"💡 **Suggestion:** {issue['suggestion']}")
-                        feedback_parts.append("")
-                
-                # Summary for category
-                remaining = category_count - 2
-                if remaining > 0:
-                    feedback_parts.append(f"📌 *... and {remaining} more {category} issue(s) (see detailed comments above)*")
-                feedback_parts.append("")
-        else:
-            feedback_parts.append("### ✅ Code Quality")
-            feedback_parts.append("**Status:** No code issues detected")
-            feedback_parts.append("")
+        # REMOVED: "Code Issues Summary & Fixes" section 
+        # (detailed issues are posted separately as inline comments via post_review_comments)
+        # This section was duplicating information already shown in individual PR comments
         
         # ANALYSIS EXECUTION STATS
-        feedback_parts.append("---")
-        feedback_parts.append("")
         feedback_parts.append("### 💻 Analysis Execution Stats")
         if summary.tokens_used:
             feedback_parts.append(f"- 🔹 **Total Tokens Used:** {summary.tokens_used:,} tokens")
