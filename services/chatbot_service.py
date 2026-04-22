@@ -34,9 +34,11 @@ class ChatbotService:
         # Session expires after 24 hours of inactivity
         self.session_ttl_hours = 24
 
-    def store_review_for_chat(self, review_response: CodeReviewResponse, full_files: Optional[List[Dict[str, Any]]] = None) -> str:
+    def store_review_for_chat(self, review_response: CodeReviewResponse, full_files: Optional[List[Dict[str, Any]]] = None, review_id: Optional[str] = None) -> str:
         """Store a review response and return a unique review ID for chat"""
-        review_id = str(uuid.uuid4())
+        # Use provided review_id or generate one if not provided
+        if not review_id:
+            review_id = str(uuid.uuid4())
 
         session = ChatSession(
             review_id=review_id,

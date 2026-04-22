@@ -223,7 +223,8 @@ async def review_code(request: ReviewRequest):
         logger.info(f"Code review completed successfully - {result.summary.total_comments} comments generated")
         
         # Store review for chatbot interaction (include full files if available)
-        chat_review_id = chatbot_service.store_review_for_chat(result, review_request.full_files)
+        # Pass the review_id from the result so it matches the one in the feedback
+        chat_review_id = chatbot_service.store_review_for_chat(result, review_request.full_files, review_id=result.review_id)
         result.metadata = result.metadata or {}
         result.metadata["chat_available"] = True
         result.metadata["chat_review_id"] = chat_review_id
