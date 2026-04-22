@@ -47,7 +47,8 @@ class KafkaConfigHandler:
             "errors": [],
             "warnings": [],
             "suggestions": [],
-            "config_details": {}
+            "config_details": {},
+            "failure_scenarios": []
         }
         
         # 1. Validate Broker URL
@@ -140,10 +141,152 @@ class KafkaConfigHandler:
             else:
                 validation_result["config_details"]["batch_size"] = batch_validation["details"]
         
+        # 7. CRITICAL: Check for failure scenarios
+        failure_checks = self._detect_failure_scenarios(config)
+        if failure_checks["scenarios"]:
+            validation_result["failure_scenarios"] = failure_checks["scenarios"]
+            validation_result["warnings"].extend(failure_checks["critical_warnings"])
+        
         # Add overall assessment
         validation_result["assessment"] = self._generate_assessment(validation_result)
         
         return validation_result
+    
+    def _detect_failure_scenarios(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Detect critical failure scenarios that could cause data loss or system failures.
+        
+        Checks for:
+        - Wrong broker address (connectivity failure)
+        - Weak durability (acks: '1')
+        - No retries (message loss)
+        - Auto-commit enabled (data loss on crash)
+        - High session timeout (slow failure detection)
+        """
+        result = {"scenarios": [], "critical_warnings": []}
+        
+        # Scenario 1: Wrong Broker Address
+        broker_url = config.get("broker_url", "").strip()
+        if broker_url and ("wrong" in broker_url.lower() or "placeholder" in broker_url.lower()):
+            result["scenarios"].append({
+                "severity": "CRITICAL",
+                "scenario": "❌ Wrong Broker Address",
+                "current": f"'bootstrap.servers': '{broker_url}'",
+                "problem": "This would break connectivity completely. Producer/consumer cannot reach the broker.",
+                "impact": "COMPLETE SERVICE FAILURE - No messages can be sent or received",
+                "ai_suggestion": {
+                    "title": "Fix Broker Address",
+                    "current_value": broker_url,
+                    "recommended_value": "localhost:9092 or kafka.yourdomain.com:9092",
+                    "example": "'bootstrap.servers': 'kafka.example.com:9092'",
+                    "explanation": "Use actual hostname/IP and port where Kafka broker is running"
+                }
+            })
+            result["critical_warnings"].append({
+                "field": "broker_url",
+                "message": "Broker address appears invalid or is a placeholder",
+                "risk_level": "CRITICAL"
+            })
+        
+        # Scenario 2: Weak Durability (acks: '1')
+        acks = config.get("acks", "").strip()
+        if acks == "1":
+            result["scenarios"].append({
+                "severity": "HIGH",
+                "scenario": "❌ Weak Durability",
+                "current": f"'acks': '1'",
+                "problem": "Leader acknowledges but doesn't wait for replicas. Data loss if leader fails before replication.",
+                "impact": "DATA LOSS RISK - If leader node crashes, messages may be lost even after acknowledgment",
+                "ai_suggestion": {
+                    "title": "Enable Full Durability",
+                    "current_value": "1",
+                    "recommended_value": "all",
+                    "example": "'acks': 'all'",
+                    "explanation": "Wait for all in-sync replicas to acknowledge before returning. Safer but slightly slower."
+                }
+            })
+            result["critical_warnings"].append({
+                "field": "acks",
+                "message": "Using weak durability setting (acks=1). Risk of data loss.",
+                "risk_level": "HIGH"
+            })
+        
+        # Scenario 3: No Retries
+        retries = config.get("retries")
+        if retries == 0 or retries == "0":
+            result["scenarios"].append({
+                "severity": "HIGH",
+                "scenario": "❌ No Retries on Failure",
+                "current": f"'retries': 0",
+                "problem": "Any transient failure (network blip, broker overload) will immediately fail the message.",
+                "impact": "MESSAGE LOSS - Temporary network issues will cause permanent message loss",
+                "ai_suggestion": {
+                    "title": "Enable Retry Mechanism",
+                    "current_value": "0",
+                    "recommended_value": "5",
+                    "example": "'retries': 5",
+                    "explanation": "Retry up to 5 times with exponential backoff for transient failures. Standard for production."
+                }
+            })
+            result["critical_warnings"].append({
+                "field": "retries",
+                "message": "No retries configured. Transient failures will cause message loss.",
+                "risk_level": "HIGH"
+            })
+        
+        # Scenario 4: Auto-commit Enabled (risky)
+        auto_commit = config.get("enable.auto.commit")
+        if auto_commit is True or auto_commit == "true" or auto_commit == "True":
+            result["scenarios"].append({
+                "severity": "HIGH",
+                "scenario": "❌ Risky Auto-Commit",
+                "current": f"'enable.auto.commit': True",
+                "problem": "If consumer crashes after committing but before processing, messages are lost and never reprocessed.",
+                "impact": "DATA LOSS - Messages marked as processed but not actually handled = silent failure",
+                "ai_suggestion": {
+                    "title": "Disable Auto-Commit (Handle Manually)",
+                    "current_value": "True",
+                    "recommended_value": "False",
+                    "example": "'enable.auto.commit': False",
+                    "implementation": "After successfully processing each message, manually call consumer.commit(). Only mark as processed when fully handled.",
+                    "explanation": "Manual commits ensure messages are only marked as processed AFTER successful handling."
+                }
+            })
+            result["critical_warnings"].append({
+                "field": "enable.auto.commit",
+                "message": "Auto-commit enabled. Risk of message loss on consumer crash.",
+                "risk_level": "HIGH"
+            })
+        
+        # Scenario 5: High Session Timeout
+        session_timeout = config.get("session.timeout.ms")
+        if session_timeout:
+            try:
+                timeout_ms = int(session_timeout)
+                if timeout_ms > 10000:  # More than 10 seconds
+                    result["scenarios"].append({
+                        "severity": "MEDIUM",
+                        "scenario": "❌ High Session Timeout",
+                        "current": f"'session.timeout.ms': {timeout_ms}",
+                        "problem": f"Takes {timeout_ms/1000:.1f} seconds to detect consumer failure. Slow rebalancing and recovery.",
+                        "impact": "SLOW FAILURE DETECTION - Up to {:.1f} seconds of no processing during consumer failure".format(timeout_ms/1000),
+                        "ai_suggestion": {
+                            "title": "Reduce Session Timeout for Faster Detection",
+                            "current_value": timeout_ms,
+                            "recommended_value": "6000",
+                            "example": "'session.timeout.ms': 6000",
+                            "explanation": "6 seconds allows faster failure detection and rebalancing. Standard for production systems."
+                        }
+                    })
+                    result["critical_warnings"].append({
+                        "field": "session.timeout.ms",
+                        "message": f"Session timeout too high ({timeout_ms}ms). Slow failure detection.",
+                        "risk_level": "MEDIUM"
+                    })
+            except (ValueError, TypeError):
+                pass
+        
+        return result
     
     def _validate_broker_url(self, broker_url: str) -> Dict[str, Any]:
         """Validate Kafka broker URL format."""
@@ -409,20 +552,37 @@ class KafkaConfigHandler:
             "status": "✅ PASS" if validation_result["is_valid"] else "❌ FAIL",
             "errors_count": len(validation_result["errors"]),
             "warnings_count": len(validation_result["warnings"]),
+            "failure_scenarios_count": len(validation_result.get("failure_scenarios", [])),
             "suggestions_count": len(validation_result["suggestions"]),
-            "next_steps": []
+            "next_steps": [],
+            "risk_level": "LOW"
         }
         
+        # Determine overall risk level
+        if validation_result.get("failure_scenarios"):
+            high_severity_scenarios = [s for s in validation_result["failure_scenarios"] if s.get("severity") in ["CRITICAL", "HIGH"]]
+            if high_severity_scenarios:
+                assessment["risk_level"] = "CRITICAL" if any(s.get("severity") == "CRITICAL" for s in high_severity_scenarios) else "HIGH"
+        
         if not validation_result["is_valid"]:
-            assessment["next_steps"].append("Fix all errors before proceeding")
+            assessment["next_steps"].append("🔴 Fix all errors before proceeding")
+            assessment["risk_level"] = "CRITICAL"
+        
+        if validation_result.get("failure_scenarios"):
+            assessment["next_steps"].append("⚠️ CRITICAL: Review and fix failure scenarios to prevent data loss")
+            assessment["next_steps"].append("   - Review each scenario below for specific AI recommendations")
+            assessment["next_steps"].append("   - Implement suggested changes before production deployment")
         
         if validation_result["warnings"]:
-            assessment["next_steps"].append("Review warnings - they may indicate configuration issues")
+            assessment["next_steps"].append("⚠️ Review warnings - they indicate configuration risks")
         
         if validation_result["suggestions"]:
-            assessment["next_steps"].append("Consider implementing suggestions for better reliability")
+            assessment["next_steps"].append("💡 Consider implementing suggestions for better reliability")
         
-        assessment["next_steps"].append("Test connection with: kafkacat -b <broker_url> -L")
+        if not validation_result.get("failure_scenarios") and not validation_result["errors"]:
+            assessment["next_steps"].append("✅ Configuration looks good")
+        
+        assessment["next_steps"].append("🧪 Test connection with: kafkacat -b <broker_url> -L")
         
         return assessment
 

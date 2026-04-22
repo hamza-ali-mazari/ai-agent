@@ -556,6 +556,10 @@ class KafkaConfigRequest(BaseModel):
     replication_factor: Optional[int] = None
     connection_timeout_ms: Optional[int] = None
     batch_size: Optional[int] = None
+    acks: Optional[str] = None  # '0', '1', 'all'
+    retries: Optional[int] = None
+    enable_auto_commit: Optional[bool] = None
+    session_timeout_ms: Optional[int] = None
     
     model_config = {
         "json_schema_extra": {
@@ -565,7 +569,11 @@ class KafkaConfigRequest(BaseModel):
                 "partitions": 3,
                 "replication_factor": 2,
                 "connection_timeout_ms": 30000,
-                "batch_size": 16384
+                "batch_size": 16384,
+                "acks": "all",
+                "retries": 5,
+                "enable_auto_commit": False,
+                "session_timeout_ms": 6000
             }
         }
     }
