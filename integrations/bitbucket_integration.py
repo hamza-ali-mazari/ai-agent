@@ -219,6 +219,12 @@ class BitbucketIntegration:
             await self.post_review_summary(workspace, repo_slug, pr_id, review_response)
             logger.info(f"Review summary posted for PR #{pr_id}")
 
+            # Post interactive chatbot UI to PR
+            logger.info(f"Posting interactive chatbot UI for PR #{pr_id}")
+            review_id = review_response.get("review_id", f"review_{datetime.now().isoformat()}")
+            await self.post_interactive_chatbot(workspace, repo_slug, pr_id, review_id, summary)
+            logger.info(f"Interactive chatbot UI posted for PR #{pr_id}")
+
             # Emit approval ready event (if destination is master or sit and no critical issues)
             if self.kafka_handler and destination_branch.lower() in ["master", "sit"] and not has_critical:
                 try:
@@ -529,6 +535,35 @@ class BitbucketIntegration:
 
         if response.status_code not in [201, 200]:
             logger.error(f"Failed to post summary: {response.status_code}")
+
+    async def post_interactive_chatbot(self, workspace: str, repo_slug: str, pr_id: int, review_id: str, review_summary: Dict[str, Any]):
+        """Post interactive chatbot UI as a comment to the PR"""
+        from services.bitbucket_chatbot_ui import create_interactive_chatbot_comment
+        
+        try:
+            chatbot_html = create_interactive_chatbot_comment(review_id, review_summary)
+            
+            comment_body = f"""
+🤖 **AI Code Review Chatbot** 
+
+Ask questions about the review findings directly in this PR!
+
+**Review Stats:**
+- Overall Score: {review_summary.get('overall_score', 'N/A')}/100
+- Critical Issues: {review_summary.get('critical_issues', 0)}
+- High Issues: {review_summary.get('high_issues', 0)}
+
+{chatbot_html}
+
+---
+*This chatbot allows you to get detailed explanations about code issues, performance suggestions, and security vulnerabilities found in your PR.*
+"""
+            
+            await self.post_review_comment(workspace, repo_slug, pr_id, comment_body)
+            logger.info(f"Posted interactive chatbot to PR #{pr_id}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to post interactive chatbot: {str(e)}")
 
     def _detect_language(self, file_path: str) -> str:
         """Detect programming language from file extension."""
