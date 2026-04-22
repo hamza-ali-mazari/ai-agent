@@ -114,6 +114,15 @@ class ChatbotService:
             ])
 
         # Create prompt for the AI
+        categories_str = ', '.join([f"{k}: {v}" for k, v in review_summary.categories_breakdown.items()])
+        files_str = chr(10).join([f"- {file.file_path} ({file.language or 'unknown'}): {len(file.comments)} comments" for file in files])
+        
+        # Build file content section if available
+        file_content_section = ""
+        if session.full_files:
+            file_lines = [f"=== {f.get('path', 'unknown')} ===\n{f.get('content', '')}" for f in session.full_files]
+            file_content_section = "COMPLETE FILE CONTENT (for detailed analysis):\n" + chr(10).join(file_lines) + "\n\n"
+        
         prompt = f"""You are an expert code review assistant helping developers understand and improve their code based on an AI-powered review.
 
 REVIEW SUMMARY:
@@ -121,18 +130,15 @@ REVIEW SUMMARY:
 - Total Comments: {review_summary.total_comments}
 - Critical Issues: {review_summary.critical_issues}
 - High Issues: {review_summary.high_issues}
-- Categories: {', '.join([f"{k}: {v}" for k, v in review_summary.categories_breakdown.items()])}
+- Categories: {categories_str}
 
 OVERALL FEEDBACK:
 {overall_feedback}
 
 FILES ANALYZED:
-{chr(10).join([f"- {file.file_path} ({file.language or 'unknown'}): {len(file.comments)} comments" for file in files])}
+{files_str}
 
-{f"""COMPLETE FILE CONTENT (for detailed analysis):
-{chr(10).join([f"=== {f.get('path', 'unknown')} ===\\n{f.get('content', '')}" for f in (session.full_files or [])])}
-""" if session.full_files else ""}
-
+{file_content_section}
 RECENT CONVERSATION:
 {conversation_context}
 
