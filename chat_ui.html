@@ -471,10 +471,14 @@
 
             try {
                 // Try to fetch review history
+                console.log('Loading review history for:', reviewId);
                 const response = await fetch(`${API_BASE_URL}/chat/${reviewId}/history`);
+                
+                console.log('History response status:', response.status);
                 
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('History loaded successfully:', data);
                     messages = data.messages || [];
                     updateStatus('Ready to chat', 'status-ready');
                     userMessageInput.disabled = false;
@@ -487,16 +491,17 @@
                     }
                 } else if (response.status === 404) {
                     updateStatus('Review ID not found', 'status-empty');
-                    displayError('Review ID not found. Please check and try again.');
+                    displayError('❌ Review ID not found. Please check the Review ID and try again.');
+                    console.error('Review not found:', reviewId);
                     userMessageInput.disabled = true;
                     sendBtn.disabled = true;
                 } else {
-                    throw new Error('Failed to load review');
+                    throw new Error(`HTTP ${response.status}`);
                 }
             } catch (error) {
                 console.error('Error loading review:', error);
-                updateStatus('Error loading review', 'status-empty');
-                displayError('Failed to connect to the server. Please try again.');
+                updateStatus('Connection error', 'status-empty');
+                displayError(`❌ Failed to connect to server: ${error.message}. Make sure the server is running at ${API_BASE_URL}`);
                 userMessageInput.disabled = true;
                 sendBtn.disabled = true;
             }
@@ -618,18 +623,29 @@
 
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('Chat response received:', data);
                     removeTypingIndicator();
                     displayMessage('assistant', data.message);
                     messages.push({ role: 'assistant', message: data.message });
+                } else if (response.status === 404) {
+                    removeTypingIndicator();
+                    const error = await response.json();
+                    displayError('Review session not found. Please paste a valid Review ID and try again.');
+                    console.error('Review not found:', error);
+                } else if (response.status === 400) {
+                    removeTypingIndicator();
+                    displayError('Empty message. Please type a question and try again.');
+                    console.error('Bad request:', await response.json());
                 } else {
                     removeTypingIndicator();
                     const error = await response.json();
-                    displayError(error.detail || 'Failed to get response from AI');
+                    displayError(error.detail || 'Failed to get response from AI. Please try again.');
+                    console.error('API error:', error);
                 }
             } catch (error) {
                 console.error('Error sending message:', error);
                 removeTypingIndicator();
-                displayError('Failed to send message. Please try again.');
+                displayError(`Connection error: ${error.message}. Please check if the server is running.`);
             } finally {
                 sendBtn.disabled = false;
                 userMessageInput.disabled = false;

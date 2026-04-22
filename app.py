@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import logging
 import json
@@ -21,6 +22,15 @@ app = FastAPI(
     title="AI Code Review Engine",
     description="Professional AI-powered code review engine for Bitbucket with Kafka-driven event architecture and deep dependency analysis",
     version="2.0.0"
+)
+
+# Enable CORS for chat UI access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development (restrict in production)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Initialize integrations and services
@@ -453,6 +463,7 @@ class ChatMessageRequest(BaseModel):
 
 @app.post("/chat/{review_id}", response_model=Dict[str, Any], responses={
     200: {"description": "Successful chatbot response"},
+    400: {"description": "Bad request - empty message"},
     404: {"description": "Review session not found"},
     500: {"description": "Internal server error"}
 })
@@ -465,26 +476,32 @@ async def chat_with_review(review_id: str, request: ChatMessageRequest):
     """
     try:
         logger.info(f"Received chat message for review: {review_id}")
-
-        if not request.message.strip():
+        
+        message_text = request.message.strip()
+        if not message_text:
             raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-        response = chatbot_service.send_message(review_id, request.message)
+        logger.debug(f"Processing message: {message_text[:100]}...")
+        response = chatbot_service.send_message(review_id, message_text)
 
         if response is None:
+            logger.warning(f"Review session not found: {review_id}")
             raise HTTPException(status_code=404, detail="Review session not found or expired")
 
+        logger.info(f"Chat response generated successfully for review: {review_id}")
+        
         return {
             "review_id": review_id,
-            "response": response,
+            "message": response,  # Changed from 'response' to 'message' to match UI expectations
             "status": "success"
         }
 
-    except HTTPException:
+    except HTTPException as http_err:
+        logger.error(f"HTTP Error: {http_err.detail}")
         raise
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @app.get("/chat/{review_id}/history", response_model=Dict[str, Any], responses={
@@ -504,17 +521,21 @@ async def get_chat_history(review_id: str):
         history = chatbot_service.get_conversation_history(review_id)
 
         if history is None:
+            logger.warning(f"No history found for review: {review_id}")
             raise HTTPException(status_code=404, detail="Review session not found or expired")
 
+        logger.info(f"Retrieved {len(history)} messages for review: {review_id}")
+        
         return {
             "review_id": review_id,
-            "history": history,
+            "messages": history,  # Changed from 'history' to 'messages' to match UI expectations
             "message_count": len(history),
             "status": "success"
         }
 
-    except HTTPException:
+    except HTTPException as http_err:
+        logger.error(f"HTTP Error: {http_err.detail}")
         raise
     except Exception as e:
-        logger.error(f"Error retrieving chat history: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Error retrieving chat history: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
