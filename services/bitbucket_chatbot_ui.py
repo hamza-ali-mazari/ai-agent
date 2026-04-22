@@ -8,283 +8,290 @@ def create_interactive_chatbot_comment(review_id, review_summary):
     This appears directly in the PR with distinctive styling
     """
     
-    # HTML/CSS/JS for the interactive chatbot widget with DISTINCTIVE DESIGN
-    html_content = f"""
-<!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║         💬 INTERACTIVE AI CODE REVIEW CHATBOT 💬            ║ -->
-<!-- ╚══════════════════════════════════════════════════════════════╝ -->
-
-<div id="ai-chatbot-widget" style="
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: 4px solid #667eea;
-    border-radius: 12px;
-    padding: 20px;
-    margin: 20px 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);
-    position: relative;
-">
+    # Extract variables to avoid nested f-string issues
+    overall_score = review_summary.get('overall_score', 'N/A')
+    critical_issues = review_summary.get('critical_issues', 0)
+    high_issues = review_summary.get('high_issues', 0)
+    medium_issues = review_summary.get('medium_issues', 0)
+    total_issues = critical_issues + high_issues + medium_issues
     
-    <!-- BANNER HEADER -->
-    <div style="
-        text-align: center;
-        background: rgba(255, 255, 255, 0.95);
-        padding: 15px;
-        border-radius: 8px;
-        margin-bottom: 15px;
-        border: 2px dashed #667eea;
-    ">
-        <div style="font-size: 48px; margin: 0;">💬</div>
-        <h2 style="
-            margin: 8px 0 0 0;
-            color: #667eea;
-            font-size: 24px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        ">AI CODE REVIEW CHATBOT</h2>
-        <div style="
-            color: #764ba2;
-            font-size: 12px;
-            margin-top: 5px;
-            font-weight: bold;
-        ">🟢 Ready to Answer Questions About Your Code Review</div>
-    </div>
+    # Build HTML WITHOUT using f-string for JavaScript to avoid variable interpretation
+    html_parts = [
+        "<!-- ╔══════════════════════════════════════════════════════════════╗ -->",
+        "<!-- ║         💬 INTERACTIVE AI CODE REVIEW CHATBOT 💬            ║ -->",
+        "<!-- ╚══════════════════════════════════════════════════════════════╝ -->",
+        "",
+        '<div id="ai-chatbot-widget" style="',
+        '    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);',
+        '    border: 4px solid #667eea;',
+        '    border-radius: 12px;',
+        '    padding: 20px;',
+        '    margin: 20px 0;',
+        '    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;',
+        '    box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);',
+        '    position: relative;',
+        '">',
+        '    <!-- BANNER HEADER -->',
+        '    <div style="',
+        '        text-align: center;',
+        '        background: rgba(255, 255, 255, 0.95);',
+        '        padding: 15px;',
+        '        border-radius: 8px;',
+        '        margin-bottom: 15px;',
+        '        border: 2px dashed #667eea;',
+        '    ">',
+        '        <div style="font-size: 48px; margin: 0;">💬</div>',
+        '        <h2 style="',
+        '            margin: 8px 0 0 0;',
+        '            color: #667eea;',
+        '            font-size: 24px;',
+        '            font-weight: 800;',
+        '            text-transform: uppercase;',
+        '            letter-spacing: 1px;',
+        '        ">AI CODE REVIEW CHATBOT</h2>',
+        '        <div style="',
+        '            color: #764ba2;',
+        '            font-size: 12px;',
+        '            margin-top: 5px;',
+        '            font-weight: bold;',
+        '        ">🟢 Ready to Answer Questions About Your Code Review</div>',
+        '    </div>',
+        '    ',
+        '    <!-- QUICK STATS CARDS -->',
+        '    <div style="',
+        '        display: grid;',
+        '        grid-template-columns: repeat(2, 1fr);',
+        '        gap: 10px;',
+        '        margin-bottom: 15px;',
+        '    ">',
+        '        <div style="',
+        '            background: rgba(255, 255, 255, 0.9);',
+        '            padding: 12px;',
+        '            border-radius: 6px;',
+        '            text-align: center;',
+        '            border-left: 4px solid #667eea;',
+        '        ">',
+        '            <div style="color: #999; font-size: 11px; text-transform: uppercase;">Overall Score</div>',
+        f'            <div style="font-size: 32px; font-weight: bold; color: #667eea;">{overall_score}</div>',
+        '            <div style="color: #999; font-size: 10px;">/100</div>',
+        '        </div>',
+        '        ',
+        '        <div style="',
+        '            background: rgba(255, 255, 255, 0.9);',
+        '            padding: 12px;',
+        '            border-radius: 6px;',
+        '            text-align: center;',
+        '            border-left: 4px solid #764ba2;',
+        '        ">',
+        '            <div style="color: #999; font-size: 11px; text-transform: uppercase;">Issues Found</div>',
+        f'            <div style="font-size: 32px; font-weight: bold; color: #764ba2;">{total_issues}</div>',
+        '            <div style="color: #999; font-size: 10px;">Total Issues</div>',
+        '        </div>',
+        '    </div>',
+        '    ',
+        '    <!-- SEVERITY BREAKDOWN -->',
+        '    <div style="',
+        '        background: rgba(255, 255, 255, 0.9);',
+        '        padding: 12px;',
+        '        border-radius: 6px;',
+        '        margin-bottom: 15px;',
+        '        font-size: 13px;',
+        '    ">',
+        '        <div style="font-weight: bold; margin-bottom: 8px; color: #333;">Severity Breakdown:</div>',
+        '        <div style="display: flex; gap: 12px; flex-wrap: wrap;">',
+        f'            <div>🔴 <strong>Critical:</strong> {critical_issues}</div>',
+        f'            <div>🟠 <strong>High:</strong> {high_issues}</div>',
+        f'            <div>🟡 <strong>Medium:</strong> {medium_issues}</div>',
+        '        </div>',
+        '    </div>',
+        '    ',
+        '    <!-- CHAT CONTAINER - VISIBLE BY DEFAULT -->',
+        '    <div id="chatbot-container" style="',
+        '        background: rgba(255, 255, 255, 0.98);',
+        '        border: 2px solid rgba(102, 126, 234, 0.3);',
+        '        border-radius: 8px;',
+        '        padding: 15px;',
+        '        max-height: 500px;',
+        '        overflow-y: auto;',
+        '        margin-bottom: 15px;',
+        '    ">',
+        '        ',
+        '        <!-- Messages Display -->',
+        '        <div id="chat-messages" style="',
+        '            margin-bottom: 15px;',
+        '            font-size: 13px;',
+        '            min-height: 150px;',
+        '            padding: 10px;',
+        '            background: #f9f9f9;',
+        '            border-radius: 6px;',
+        '        ">',
+        '            <div style="color: #667eea; text-align: center; padding: 20px; font-weight: bold;">',
+        '                ✅ Chatbot Ready! Ask any questions about the code review findings.',
+        '            </div>',
+        '        </div>',
+        '        ',
+        '        <!-- Input Area -->',
+        '        <div style="display: flex; gap: 8px; margin-bottom: 12px;">',
+        '            <input ',
+        '                type="text" ',
+        '                id="chat-input" ',
+        '                placeholder="🔍 Ask a question about the code review..." ',
+        '                style="',
+        '                    flex: 1;',
+        '                    padding: 12px;',
+        '                    border: 2px solid #667eea;',
+        '                    border-radius: 6px;',
+        '                    font-size: 13px;',
+        '                    outline: none;',
+        '                    transition: all 0.3s;',
+        '                "',
+        '            />',
+        '            <button ',
+        '                onclick="sendChatMessage()" ',
+        '                style="',
+        '                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);',
+        '                    color: white;',
+        '                    border: none;',
+        '                    padding: 12px 24px;',
+        '                    border-radius: 6px;',
+        '                    cursor: pointer;',
+        '                    font-weight: bold;',
+        '                    font-size: 13px;',
+        '                    transition: all 0.3s;',
+        '                    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);',
+        '                "',
+        '            >📤 Send</button>',
+        '        </div>',
+        '        ',
+        '        <!-- Suggested Questions -->',
+        '        <div style="',
+        '            background: #f0f4ff;',
+        '            padding: 12px;',
+        '            border-radius: 6px;',
+        '            font-size: 12px;',
+        '            border: 1px dashed #667eea;',
+        '        ">',
+        '            <div style="font-weight: bold; margin-bottom: 8px; color: #667eea;">💡 Popular Questions:</div>',
+        '            <div style="display: flex; flex-wrap: wrap; gap: 6px;">',
+        '                <button onclick="askQuestion(\'What are the critical security issues?\')" style="background: #fff; border: 1px solid #667eea; color: #667eea; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;">🔒 Security Issues</button>',
+        '                <button onclick="askQuestion(\'How can I improve code quality?\')" style="background: #fff; border: 1px solid #667eea; color: #667eea; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;">⚡ Code Quality</button>',
+        '                <button onclick="askQuestion(\'Show performance improvements\')" style="background: #fff; border: 1px solid #667eea; color: #667eea; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;">🚀 Performance</button>',
+        '                <button onclick="askQuestion(\'What best practices should I follow?\')" style="background: #fff; border: 1px solid #667eea; color: #667eea; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;">✨ Best Practices</button>',
+        '            </div>',
+        '        </div>',
+        '    </div>',
+        '    ',
+        '    <!-- REVIEW ID -->',
+        '    <div style="',
+        '        background: rgba(0, 0, 0, 0.1);',
+        '        padding: 10px;',
+        '        border-radius: 4px;',
+        '        color: white;',
+        '        font-size: 11px;',
+        '        text-align: center;',
+        '        font-family: monospace;',
+        '    ">',
+        f'        Review ID: <strong>{review_id}</strong>',
+        '    </div>',
+        '    ',
+        '</div>',
+        '',
+        '<script>',
+        '// Global variables',
+        f'const REVIEW_ID = "{review_id}";',
+        'const API_BASE = "http://localhost:10000";',
+        'let isLoading = false;',
+        '',
+        '// Send chat message',
+        'async function sendChatMessage() {',
+        '    const input = document.getElementById("chat-input");',
+        '    const msg = input.value.trim();',
+        '    ',
+        '    if (!msg || isLoading) return;',
+        '    ',
+        '    isLoading = true;',
+        '    input.disabled = true;',
+        '    ',
+        '    try {',
+        '        // Add user message to chat',
+        '        addMessageToChat("YOU", msg, true);',
+        '        input.value = "";',
+        '        ',
+        '        // Send to API',
+        '        const response = await fetch(`${API_BASE}/chat/${REVIEW_ID}`, {',
+        '            method: "POST",',
+        '            headers: {"Content-Type": "application/json"},',
+        '            body: JSON.stringify({message: msg})',
+        '        });',
+        '        ',
+        '        if (!response.ok) {',
+        '            addMessageToChat("ERROR", "❌ Failed to get response from chatbot", false);',
+        '            return;',
+        '        }',
+        '        ',
+        '        const data = await response.json();',
+        '        addMessageToChat("🤖 CHATBOT", data.message || "No response", false);',
+        '        ',
+        '    } catch (error) {',
+        '        addMessageToChat("ERROR", `❌ Error: ${error.message}`, false);',
+        '    } finally {',
+        '        isLoading = false;',
+        '        input.disabled = false;',
+        '        input.focus();',
+        '    }',
+        '}',
+        '',
+        '// Ask a suggested question',
+        'function askQuestion(question) {',
+        '    document.getElementById("chat-input").value = question;',
+        '    sendChatMessage();',
+        '}',
+        '',
+        '// Add message to chat display',
+        'function addMessageToChat(role, msg, isUser) {',
+        '    const messagesDiv = document.getElementById("chat-messages");',
+        '    const msgEl = document.createElement("div");',
+        '    msgEl.style.marginBottom = "10px";',
+        '    msgEl.style.padding = "10px";',
+        '    msgEl.style.borderRadius = "6px";',
+        '    msgEl.style.fontSize = "12px";',
+        '    msgEl.style.lineHeight = "1.4";',
+        '    ',
+        '    if (isUser) {',
+        '        msgEl.style.backgroundColor = "#e8f5e9";',
+        '        msgEl.style.borderLeft = "4px solid #4CAF50";',
+        '        msgEl.style.color = "#1b5e20";',
+        '        msgEl.innerHTML = `<strong>👤 You:</strong><br>${msg}`;',
+        '    } else if (role === "ERROR") {',
+        '        msgEl.style.backgroundColor = "#ffebee";',
+        '        msgEl.style.borderLeft = "4px solid #f44336";',
+        '        msgEl.style.color = "#b71c1c";',
+        '        msgEl.innerHTML = `<strong>⚠️ Error:</strong><br>${msg}`;',
+        '    } else {',
+        '        msgEl.style.backgroundColor = "#f3e5f5";',
+        '        msgEl.style.borderLeft = "4px solid #667eea";',
+        '        msgEl.style.color = "#4a148c";',
+        '        msgEl.innerHTML = `<strong>${role}:</strong><br>${msg}`;',
+        '    }',
+        '    ',
+        '    messagesDiv.appendChild(msgEl);',
+        '    messagesDiv.scrollTop = messagesDiv.scrollHeight;',
+        '}',
+        '',
+        '// Handle Enter key',
+        'document.addEventListener("DOMContentLoaded", function() {',
+        '    const input = document.getElementById("chat-input");',
+        '    if (input) {',
+        '        input.addEventListener("keypress", function(e) {',
+        '            if (e.key === "Enter") {',
+        '                sendChatMessage();',
+        '            }',
+        '        });',
+        '        input.focus();',
+        '    }',
+        '});',
+        '</script>'
+    ]
     
-    <!-- QUICK STATS CARDS -->
-    <div style="
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
-        margin-bottom: 15px;
-    ">
-        <div style="
-            background: rgba(255, 255, 255, 0.9);
-            padding: 12px;
-            border-radius: 6px;
-            text-align: center;
-            border-left: 4px solid #667eea;
-        ">
-            <div style="color: #999; font-size: 11px; text-transform: uppercase;">Overall Score</div>
-            <div style="font-size: 32px; font-weight: bold; color: #667eea;">{review_summary.get('overall_score', 'N/A')}</div>
-            <div style="color: #999; font-size: 10px;">/100</div>
-        </div>
-        
-        <div style="
-            background: rgba(255, 255, 255, 0.9);
-            padding: 12px;
-            border-radius: 6px;
-            text-align: center;
-            border-left: 4px solid #764ba2;
-        ">
-            <div style="color: #999; font-size: 11px; text-transform: uppercase;">Issues Found</div>
-            <div style="font-size: 32px; font-weight: bold; color: #764ba2;">{review_summary.get('critical_issues', 0) + review_summary.get('high_issues', 0) + review_summary.get('medium_issues', 0)}</div>
-            <div style="color: #999; font-size: 10px;">Total Issues</div>
-        </div>
-    </div>
-    
-    <!-- SEVERITY BREAKDOWN -->
-    <div style="
-        background: rgba(255, 255, 255, 0.9);
-        padding: 12px;
-        border-radius: 6px;
-        margin-bottom: 15px;
-        font-size: 13px;
-    ">
-        <div style="font-weight: bold; margin-bottom: 8px; color: #333;">Severity Breakdown:</div>
-        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-            <div>🔴 <strong>Critical:</strong> {review_summary.get('critical_issues', 0)}</div>
-            <div>🟠 <strong>High:</strong> {review_summary.get('high_issues', 0)}</div>
-            <div>🟡 <strong>Medium:</strong> {review_summary.get('medium_issues', 0)}</div>
-        </div>
-    </div>
-    
-    <!-- CHAT CONTAINER - VISIBLE BY DEFAULT -->
-    <div id="chatbot-container" style="
-        background: rgba(255, 255, 255, 0.98);
-        border: 2px solid rgba(102, 126, 234, 0.3);
-        border-radius: 8px;
-        padding: 15px;
-        max-height: 500px;
-        overflow-y: auto;
-        margin-bottom: 15px;
-    ">
-        
-        <!-- Messages Display -->
-        <div id="chat-messages" style="
-            margin-bottom: 15px;
-            font-size: 13px;
-            min-height: 150px;
-            padding: 10px;
-            background: #f9f9f9;
-            border-radius: 6px;
-        ">
-            <div style="color: #667eea; text-align: center; padding: 20px; font-weight: bold;">
-                ✅ Chatbot Ready! Ask any questions about the code review findings.
-            </div>
-        </div>
-        
-        <!-- Input Area -->
-        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-            <input 
-                type="text" 
-                id="chat-input" 
-                placeholder="🔍 Ask a question about the code review..." 
-                style="
-                    flex: 1;
-                    padding: 12px;
-                    border: 2px solid #667eea;
-                    border-radius: 6px;
-                    font-size: 13px;
-                    outline: none;
-                    transition: all 0.3s;
-                "
-            />
-            <button 
-                onclick="sendChatMessage()" 
-                style="
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    border: none;
-                    padding: 12px 24px;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-weight: bold;
-                    font-size: 13px;
-                    transition: all 0.3s;
-                    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-                "
-            >📤 Send</button>
-        </div>
-        
-        <!-- Suggested Questions -->
-        <div style="
-            background: #f0f4ff;
-            padding: 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            border: 1px dashed #667eea;
-        ">
-            <div style="font-weight: bold; margin-bottom: 8px; color: #667eea;">💡 Popular Questions:</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                <button onclick="askQuestion('What are the critical security issues?')" style="background: #fff; border: 1px solid #667eea; color: #667eea; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;">🔒 Security Issues</button>
-                <button onclick="askQuestion('How can I improve code quality?')" style="background: #fff; border: 1px solid #667eea; color: #667eea; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;">⚡ Code Quality</button>
-                <button onclick="askQuestion('Show performance improvements')" style="background: #fff; border: 1px solid #667eea; color: #667eea; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;">🚀 Performance</button>
-                <button onclick="askQuestion('What best practices should I follow?')" style="background: #fff; border: 1px solid #667eea; color: #667eea; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;">✨ Best Practices</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- REVIEW ID -->
-    <div style="
-        background: rgba(0, 0, 0, 0.1);
-        padding: 10px;
-        border-radius: 4px;
-        color: white;
-        font-size: 11px;
-        text-align: center;
-        font-family: monospace;
-    ">
-        Review ID: <strong>{review_id}</strong>
-    </div>
-    
-</div>
-
-<script>
-// Global variables
-const REVIEW_ID = "{review_id}";
-const API_BASE = "http://localhost:10000";
-let isLoading = false;
-
-// Send chat message
-async function sendChatMessage() {{
-    const input = document.getElementById("chat-input");
-    const message = input.value.trim();
-    
-    if (!message || isLoading) return;
-    
-    isLoading = true;
-    input.disabled = true;
-    
-    try {{
-        // Add user message to chat
-        addMessageToChat("YOU", message, true);
-        input.value = "";
-        
-        // Send to API
-        const response = await fetch(`${{API_BASE}}/chat/${{REVIEW_ID}}`, {{
-            method: "POST",
-            headers: {{"Content-Type": "application/json"}},
-            body: JSON.stringify({{message: message}})
-        }});
-        
-        if (!response.ok) {{
-            addMessageToChat("ERROR", "❌ Failed to get response from chatbot", false);
-            return;
-        }}
-        
-        const data = await response.json();
-        addMessageToChat("🤖 CHATBOT", data.message || "No response", false);
-        
-    }} catch (error) {{
-        addMessageToChat("ERROR", `❌ Error: ${{error.message}}`, false);
-    }} finally {{
-        isLoading = false;
-        input.disabled = false;
-        input.focus();
-    }}
-}}
-
-// Ask a suggested question
-function askQuestion(question) {{
-    document.getElementById("chat-input").value = question;
-    sendChatMessage();
-}}
-
-// Add message to chat display
-function addMessageToChat(role, message, isUser) {{
-    const messagesDiv = document.getElementById("chat-messages");
-    const msgEl = document.createElement("div");
-    msgEl.style.marginBottom = "10px";
-    msgEl.style.padding = "10px";
-    msgEl.style.borderRadius = "6px";
-    msgEl.style.fontSize = "12px";
-    msgEl.style.lineHeight = "1.4";
-    
-    if (isUser) {{
-        msgEl.style.backgroundColor = "#e8f5e9";
-        msgEl.style.borderLeft = "4px solid #4CAF50";
-        msgEl.style.color = "#1b5e20";
-        msgEl.innerHTML = `<strong>👤 You:</strong><br>${message}`;
-    }} else if (role === "ERROR") {{
-        msgEl.style.backgroundColor = "#ffebee";
-        msgEl.style.borderLeft = "4px solid #f44336";
-        msgEl.style.color = "#b71c1c";
-        msgEl.innerHTML = `<strong>⚠️ Error:</strong><br>${message}`;
-    }} else {{
-        msgEl.style.backgroundColor = "#f3e5f5";
-        msgEl.style.borderLeft = "4px solid #667eea";
-        msgEl.style.color = "#4a148c";
-        msgEl.innerHTML = `<strong>${role}:</strong><br>${message}`;
-    }}
-    
-    messagesDiv.appendChild(msgEl);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}}
-
-// Handle Enter key
-document.addEventListener("DOMContentLoaded", function() {{
-    const input = document.getElementById("chat-input");
-    if (input) {{
-        input.addEventListener("keypress", function(e) {{
-            if (e.key === "Enter") {{
-                sendChatMessage();
-            }}
-        }});
-        input.focus();
-    }}
-}});
-</script>
-"""
-    
+    html_content = "\n".join(html_parts)
     return html_content
