@@ -9,6 +9,7 @@ import requests
 from services.ai_review import AICodeReviewEngine, analyze_code_diff, CodeReviewRequest, CodeReviewResponse
 from services.kafka_config import KafkaConfigHandler
 from services.token_tracker import token_tracker
+from services.chatbot_service import chatbot_service
 from models.review import ReviewConfig
 from integrations.bitbucket_integration import BitbucketIntegration, BitbucketWebhookPayload
 
@@ -102,7 +103,9 @@ async def root():
             "webhook": "/webhook/bitbucket",
             "approval": "/bitbucket/approval/{workspace}/{repo_slug}/{pr_id}",
             "token_stats": "/stats/tokens",
-            "token_report": "/stats/tokens/report"
+            "token_report": "/stats/tokens/report",
+            "chat": "/chat/{review_id}",
+            "chat_history": "/chat/{review_id}/history"
         }
     }
 
@@ -197,6 +200,13 @@ async def review_code(request: ReviewRequest):
             logger.info(cumulative_report)
 
         logger.info(f"Code review completed successfully - {result.summary.total_comments} comments generated")
+        
+        # Store review for chatbot interaction (include full files if available)
+        chat_review_id = chatbot_service.store_review_for_chat(result, review_request.full_files)
+        result.metadata = result.metadata or {}
+        result.metadata["chat_available"] = True
+        result.metadata["chat_review_id"] = chat_review_id
+        
         return result
 
     except HTTPException:
@@ -415,3 +425,85 @@ async def get_default_config():
         "cache_ttl_seconds": 3600
     }
     return default_config
+
+
+# Chatbot endpoints
+class ChatMessageRequest(BaseModel):
+    message: str
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "message": "Can you explain the security issues in more detail?"
+            }
+        }
+    }
+
+
+@app.post("/chat/{review_id}", response_model=Dict[str, Any], responses={
+    200: {"description": "Successful chatbot response"},
+    404: {"description": "Review session not found"},
+    500: {"description": "Internal server error"}
+})
+async def chat_with_review(review_id: str, request: ChatMessageRequest):
+    """
+    Send a message to the chatbot about a specific code review.
+
+    The chatbot can answer questions about the review findings, provide clarifications,
+    explain technical concepts, and offer additional advice.
+    """
+    try:
+        logger.info(f"Received chat message for review: {review_id}")
+
+        if not request.message.strip():
+            raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+        response = chatbot_service.send_message(review_id, request.message)
+
+        if response is None:
+            raise HTTPException(status_code=404, detail="Review session not found or expired")
+
+        return {
+            "review_id": review_id,
+            "response": response,
+            "status": "success"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/chat/{review_id}/history", response_model=Dict[str, Any], responses={
+    200: {"description": "Conversation history retrieved"},
+    404: {"description": "Review session not found"},
+    500: {"description": "Internal server error"}
+})
+async def get_chat_history(review_id: str):
+    """
+    Get the conversation history for a specific review chat session.
+
+    Returns all messages exchanged with the chatbot for this review.
+    """
+    try:
+        logger.info(f"Retrieving chat history for review: {review_id}")
+
+        history = chatbot_service.get_conversation_history(review_id)
+
+        if history is None:
+            raise HTTPException(status_code=404, detail="Review session not found or expired")
+
+        return {
+            "review_id": review_id,
+            "history": history,
+            "message_count": len(history),
+            "status": "success"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving chat history: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -12,6 +12,7 @@ A professional, enterprise-grade AI-powered code review engine designed for seam
 - **AI-Powered Insights**: Uses advanced language models for intelligent code analysis
 - **Inline Code Suggestions**: Provides actionable code suggestions that can be applied directly in PRs
 - **Consolidated Security Analysis**: Unified security assessment across all changed files
+- **Interactive Chatbot**: Ask questions about review findings and get detailed explanations
 - **Multi-Language Support**: Supports 40+ programming languages and file types including Python, JavaScript, TypeScript, Java, C++, Go, Rust, PHP, Ruby, and more
 - **Configurable Rules**: Customizable review criteria and severity thresholds
 - **RESTful API**: Clean, documented API for easy integration
@@ -28,14 +29,18 @@ ai-code-review-engine/
 ├── services/              # Business logic
 │   ├── __init__.py
 │   ├── ai_review.py       # Core AI review engine
+│   ├── chatbot_service.py # Interactive chatbot for review discussions
 │   ├── kafka_config.py    # Kafka event handler & approval workflow
 │   └── dependency_analyzer.py  # Deep dependency analysis
 ├── integrations/          # Platform integrations
 │   ├── __init__.py
 │   └── bitbucket_integration.py  # Bitbucket webhook handler
 ├── tests/                 # Unit and integration tests
-│   └── test_api.py
+│   ├── test_api.py
+│   ├── test_chatbot.py    # Chatbot functionality tests
+│   └── test_security.py
 ├── app.py                 # FastAPI application
+├── demo_chatbot.py        # Interactive chatbot demo script
 ├── requirements.txt       # Dependencies
 ├── .env.example          # Environment template
 ├── .gitignore            # Git ignore rules
@@ -89,7 +94,39 @@ uvicorn app:app --reload --host 0.0.0.0 --port 10000
 - **API Documentation**: http://localhost:10000/docs
 - **Health Check**: http://localhost:10000/health
 
-### 6. Configure Bitbucket Webhook
+### 6. Using the Interactive Chatbot
+After performing a code review, you can chat with the AI about the findings:
+
+```python
+import requests
+
+# 1. Perform a code review
+review_response = requests.post("http://localhost:10000/review", json={
+    "diff": "your-git-diff-here"
+})
+review_data = review_response.json()
+chat_id = review_data["metadata"]["chat_review_id"]
+
+# 2. Ask questions about the review
+chat_response = requests.post(f"http://localhost:10000/chat/{chat_id}", json={
+    "message": "Can you explain the security issues in more detail?"
+})
+print(chat_response.json()["response"])
+
+# 3. Get conversation history
+history = requests.get(f"http://localhost:10000/chat/{chat_id}/history")
+print(history.json())
+```
+
+**Chatbot Features:**
+- Ask for detailed explanations of review findings
+- Get clarification on technical recommendations
+- Request examples of how to fix issues
+- Discuss specific code quality concerns
+- Understand complex security or performance issues
+- **Access complete file content** for files being reviewed in the PR
+
+### 7. Configure Bitbucket Webhook
 1. Go to your Bitbucket repository
 2. Settings → Webhooks → Add webhook
 3. URL: `http://your-server.com:10000/webhook/bitbucket`
