@@ -391,14 +391,63 @@ class CodeSmellsAnalyzer:
         file_path: str,
         lines: List[str]
     ) -> List[Dict[str, Any]]:
-        """Detect code duplication (DRY violations) including exact duplicate functions."""
+        """Detect code duplication (DRY violations) including exact duplicate functions and code blocks."""
         smells = []
         seen_blocks = defaultdict(list)
+        seen_multi_blocks = {}
 
-        # First: Detect exact duplicate FUNCTIONS/METHODS (NEW!)
+        # First: Detect exact duplicate FUNCTIONS/METHODS
         smells.extend(self._detect_duplicate_functions(file_path, lines))
 
-        # Second: Look for duplicate lines (simple heuristic)
+        # Second: Detect consecutive MULTI-LINE blocks (3+ lines) that repeat
+        clean_lines = []
+        line_map = []
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            # Skip empty lines and comments for block detection
+            if stripped and not stripped.startswith('#') and not stripped.startswith('//'):
+                clean_lines.append(stripped)
+                line_map.append(line_num)
+        
+        # Check for repeated code blocks (min 3 consecutive lines)
+        if len(clean_lines) >= 3:
+            for block_size in range(3, min(10, len(clean_lines) // 2 + 1)):  # Check blocks of 3-10 lines
+                for start_idx in range(len(clean_lines) - block_size + 1):
+                    block = tuple(clean_lines[start_idx:start_idx + block_size])
+                    if block not in seen_multi_blocks:
+                        seen_multi_blocks[block] = []
+                    seen_multi_blocks[block].append(start_idx)
+        
+        # Report duplicate multi-line blocks
+        for block, occurrences in seen_multi_blocks.items():
+            if len(occurrences) >= 2:  # Found duplicate block
+                # Get line numbers for the first occurrence
+                first_occurrence = occurrences[0]
+                block_start_line = line_map[first_occurrence]
+                block_end_line = line_map[first_occurrence + len(block) - 1]
+                
+                # Get all occurrence line numbers
+                all_occurrences = []
+                for occ_idx in occurrences:
+                    start = line_map[occ_idx]
+                    end = line_map[occ_idx + len(block) - 1]
+                    all_occurrences.append(f"{start}-{end}")
+                
+                code_block = '\n'.join(block)
+                smells.append({
+                    "file": file_path,
+                    "line": block_start_line,
+                    "category": "maintainability",
+                    "type": "duplicate_code_block",
+                    "severity": "high" if len(block) >= 5 else "medium",
+                    "title": f"🔴 DUPLICATE CODE BLOCK: {len(block)} lines repeated {len(occurrences)} times!",
+                    "description": f"This {len(block)}-line code block appears {len(occurrences)} times at lines: {', '.join(all_occurrences)}. Likely copy-paste error.",
+                    "code_snippet": code_block[:200] + "..." if len(code_block) > 200 else code_block,
+                    "suggestion": f"Extract this logic into a reusable function. Remove redundant copies from lines: {', '.join(all_occurrences[1:])}.",
+                    "impact": "CRITICAL: Code duplication reduces maintainability, increases bug risk, and wastes memory."
+                })
+
+        # Third: Look for duplicate individual lines
         for line_num, line in enumerate(lines, 1):
             stripped = line.strip()
             
@@ -409,21 +458,29 @@ class CodeSmellsAnalyzer:
             # Track lines that appear multiple times
             seen_blocks[stripped].append(line_num)
 
-        # Report duplicates
+        # Report individual line duplicates (but not if already caught as block)
         for code_line, occurrences in seen_blocks.items():
             if len(occurrences) >= self.thresholds['duplicate_code']['threshold']:
-                smells.append({
-                    "file": file_path,
-                    "line": occurrences[0],
-                    "category": "maintainability",
-                    "type": "code_duplication",
-                    "severity": "medium",
-                    "title": "Code Duplication (DRY Violation)",
-                    "description": f"Code appears {len(occurrences)} times in the file at lines {occurrences}. Violates DRY principle.",
-                    "code_snippet": code_line,
-                    "suggestion": "Extract common logic into a reusable function or utility.",
-                    "impact": "Maintenance nightmare: when fixing bugs, every copy must be updated. Risk of inconsistencies."
-                })
+                # Only report if not part of a larger block we already reported
+                is_part_of_block = False
+                for block, _ in seen_multi_blocks.items():
+                    if code_line in block:
+                        is_part_of_block = True
+                        break
+                
+                if not is_part_of_block:
+                    smells.append({
+                        "file": file_path,
+                        "line": occurrences[0],
+                        "category": "maintainability",
+                        "type": "code_duplication",
+                        "severity": "medium",
+                        "title": "Code Duplication (DRY Violation)",
+                        "description": f"Code appears {len(occurrences)} times in the file at lines {occurrences}. Violates DRY principle.",
+                        "code_snippet": code_line,
+                        "suggestion": "Extract common logic into a reusable function or utility.",
+                        "impact": "Maintenance nightmare: when fixing bugs, every copy must be updated. Risk of inconsistencies."
+                    })
 
         return smells
 

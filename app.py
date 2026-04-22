@@ -6,6 +6,7 @@ import logging
 import json
 import os
 from typing import Optional, List, Dict, Any
+from urllib.parse import unquote
 import requests
 from services.ai_review import AICodeReviewEngine, analyze_code_diff, CodeReviewRequest, CodeReviewResponse
 from services.kafka_config import KafkaConfigHandler
@@ -476,6 +477,8 @@ async def chat_with_review(review_id: str, request: ChatMessageRequest):
     explain technical concepts, and offer additional advice.
     """
     try:
+        # URL decode the review_id (handle %3A for colons, etc.)
+        review_id = unquote(review_id)
         logger.info(f"Received chat message for review: {review_id}")
         
         message_text = request.message.strip()
@@ -517,6 +520,8 @@ async def get_chat_history(review_id: str):
     Returns all messages exchanged with the chatbot for this review.
     """
     try:
+        # URL decode the review_id (handle %3A for colons, etc.)
+        review_id = unquote(review_id)
         logger.info(f"Retrieving chat history for review: {review_id}")
 
         history = chatbot_service.get_conversation_history(review_id)
