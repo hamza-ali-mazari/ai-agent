@@ -563,8 +563,24 @@ Ask questions about the review findings directly in this PR!
 *This chatbot allows you to get detailed explanations about code issues, performance suggestions, and security vulnerabilities found in your PR.*
 """
             
-            await self.post_review_comment(workspace, repo_slug, pr_id, comment_body)
-            logger.info(f"Posted interactive chatbot to PR #{pr_id}")
+            # Post to Bitbucket using the same method as post_review_summary
+            headers = self.get_auth_headers()
+            headers["Content-Type"] = "application/json"
+            auth = self.get_auth()
+            
+            comment_data = {
+                "content": {
+                    "raw": comment_body
+                }
+            }
+            
+            url = f"{self.api_base}/repositories/{workspace}/{repo_slug}/pullrequests/{pr_id}/comments"
+            response = requests.post(url, json=comment_data, headers=headers, auth=auth)
+            
+            if response.status_code not in [201, 200]:
+                logger.error(f"Failed to post chatbot comment: {response.status_code}")
+            else:
+                logger.info(f"Posted interactive chatbot to PR #{pr_id}")
             
         except Exception as e:
             logger.warning(f"Failed to post interactive chatbot: {str(e)}")
