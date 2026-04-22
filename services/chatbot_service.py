@@ -125,14 +125,7 @@ class ChatbotService:
         
         prompt = f"""You are an expert code review assistant helping developers understand and improve their code based on an AI-powered review.
 
-REVIEW SUMMARY:
-- Overall Score: {review_summary.overall_score}/100
-- Total Comments: {review_summary.total_comments}
-- Critical Issues: {review_summary.critical_issues}
-- High Issues: {review_summary.high_issues}
-- Categories: {categories_str}
-
-OVERALL FEEDBACK:
+REVIEW FINDINGS:
 {overall_feedback}
 
 FILES ANALYZED:

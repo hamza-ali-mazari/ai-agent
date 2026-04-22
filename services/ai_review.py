@@ -773,7 +773,6 @@ IMPORTANT NOTES:
         # Analyze project impact if full project context is requested
         # Use environment variables as fallback if not provided in request
         project_impact_analysis = None
-        import os
         workspace = request.workspace or os.getenv("BITBUCKET_WORKSPACE")
         repo_slug = request.repo_slug or os.getenv("BITBUCKET_REPO_SLUG")
         
@@ -1529,7 +1528,6 @@ IMPORTANT NOTES:
             feedback_parts.append("```")
             feedback_parts.append("")
             feedback_parts.append("**Current Status:**")
-            import os
             workspace_set = bool(os.getenv("BITBUCKET_WORKSPACE"))
             repo_set = bool(os.getenv("BITBUCKET_REPO_SLUG"))
             feedback_parts.append(f"- BITBUCKET_WORKSPACE: {'✅ Set' if workspace_set else '❌ Not set'}")
