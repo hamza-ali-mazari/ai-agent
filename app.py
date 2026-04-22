@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 import logging
 import json
@@ -97,6 +97,7 @@ async def root():
         "version": "2.0.0",
         "docs": "/docs",
         "health": "/health",
+        "chat_ui": "/chat",
         "endpoints": {
             "review": "/review",
             "legacy_review": "/review/legacy",
@@ -105,9 +106,19 @@ async def root():
             "token_stats": "/stats/tokens",
             "token_report": "/stats/tokens/report",
             "chat": "/chat/{review_id}",
-            "chat_history": "/chat/{review_id}/history"
+            "chat_history": "/chat/{review_id}/history",
+            "chat_ui": "/chat (HTML interface)"
         }
     }
+
+@app.get("/chat")
+async def chat_ui():
+    """Serve the interactive chat UI for code review chatbot"""
+    chat_ui_path = os.path.join(os.path.dirname(__file__), "chat_ui.html")
+    if os.path.exists(chat_ui_path):
+        return FileResponse(chat_ui_path, media_type="text/html")
+    else:
+        raise HTTPException(status_code=404, detail="Chat UI not found")
 
 class ReviewRequest(BaseModel):
     diff: str

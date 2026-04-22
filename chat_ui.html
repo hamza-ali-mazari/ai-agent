@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Code Review Chatbot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 90vh;
+            max-height: 700px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .header p {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .review-id-section {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .review-id-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .review-id-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .status-ready {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-empty {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background: #ffffff;
+        }
+
+        .message {
+            display: flex;
+            gap: 12px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 80%;
+            padding: 12px 15px;
+            border-radius: 8px;
+            word-wrap: break-word;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .user .message-content {
+            background: #667eea;
+            color: white;
+            border-bottom-right-radius: 2px;
+        }
+
+        .assistant .message-content {
+            background: #f1f3f5;
+            color: #212529;
+            border-bottom-left-radius: 2px;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .user .message-avatar {
+            order: 2;
+        }
+
+        .assistant .message-avatar {
+            background: #e9ecef;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            color: #6c757d;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            opacity: 0.3;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+            max-width: 300px;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px 15px;
+            border-radius: 6px;
+            border-left: 4px solid #f5c6cb;
+            margin: 10px 0;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 12px 15px;
+            border-radius: 6px;
+            border-left: 4px solid #c3e6cb;
+            margin: 10px 0;
+        }
+
+        .input-section {
+            padding: 15px 20px;
+            border-top: 1px solid #e9ecef;
+            background: #f8f9fa;
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            display: flex;
+            gap: 10px;
+        }
+
+        .message-input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: none;
+            max-height: 100px;
+            transition: border-color 0.2s;
+        }
+
+        .message-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .message-input:disabled {
+            background: #e9ecef;
+            cursor: not-allowed;
+        }
+
+        .send-btn {
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 12px 15px;
+            background: #f1f3f5;
+            border-radius: 8px;
+            width: fit-content;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #999;
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% {
+                opacity: 0.3;
+                transform: translateY(0);
+            }
+            30% {
+                opacity: 1;
+                transform: translateY(-10px);
+            }
+        }
+
+        .suggestion-chips {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .chip {
+            padding: 8px 12px;
+            background: #e7f3ff;
+            color: #0066cc;
+            border: 1px solid #b3d9ff;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .chip:hover {
+            background: #cce5ff;
+            border-color: #80b3ff;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                max-height: 100vh;
+                border-radius: 0;
+            }
+
+            .message-content {
+                max-width: 90%;
+            }
+
+            .header h1 {
+                font-size: 20px;
+            }
+
+            .review-id-section {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .review-id-input {
+                width: 100%;
+            }
+        }
+
+        .code-block {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💬 AI Code Review Chatbot</h1>
+            <p>Ask questions about your code review findings</p>
+        </div>
+
+        <div class="review-id-section">
+            <input 
+                type="text" 
+                id="reviewId" 
+                class="review-id-input" 
+                placeholder="Paste Review ID (e.g., review_2026-04-22T06:47:11.843286)"
+            >
+            <span id="statusBadge" class="status-badge status-empty">No Review ID</span>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="empty-state">
+                <div class="empty-state-icon">🚀</div>
+                <p><strong>Welcome!</strong></p>
+                <p>Paste your Review ID above to start chatting about your code review findings.</p>
+            </div>
+        </div>
+
+        <div class="input-section">
+            <div class="input-wrapper">
+                <input 
+                    type="text" 
+                    id="userMessage" 
+                    class="message-input" 
+                    placeholder="Ask a question about your code review..."
+                    disabled
+                >
+                <button id="sendBtn" class="send-btn" disabled>Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const reviewIdInput = document.getElementById('reviewId');
+        const userMessageInput = document.getElementById('userMessage');
+        const sendBtn = document.getElementById('sendBtn');
+        const chatMessages = document.getElementById('chatMessages');
+        const statusBadge = document.getElementById('statusBadge');
+
+        let currentReviewId = null;
+        let messages = [];
+
+        // Get API base URL
+        const API_BASE_URL = window.location.origin;
+
+        // Initialize
+        reviewIdInput.addEventListener('change', loadReview);
+        reviewIdInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                loadReview();
+            }
+        });
+        userMessageInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                sendMessage();
+            }
+        });
+        sendBtn.addEventListener('click', sendMessage);
+
+        async function loadReview() {
+            const reviewId = reviewIdInput.value.trim();
+            if (!reviewId) {
+                updateStatus('No Review ID', 'status-empty');
+                return;
+            }
+
+            currentReviewId = reviewId;
+            updateStatus('Loading...', 'status-loading');
+            chatMessages.innerHTML = '';
+            messages = [];
+
+            try {
+                // Try to fetch review history
+                const response = await fetch(`${API_BASE_URL}/chat/${reviewId}/history`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    messages = data.messages || [];
+                    updateStatus('Ready to chat', 'status-ready');
+                    userMessageInput.disabled = false;
+                    sendBtn.disabled = false;
+                    
+                    if (messages.length === 0) {
+                        displayWelcomeMessage();
+                    } else {
+                        displayMessages();
+                    }
+                } else if (response.status === 404) {
+                    updateStatus('Review ID not found', 'status-empty');
+                    displayError('Review ID not found. Please check and try again.');
+                    userMessageInput.disabled = true;
+                    sendBtn.disabled = true;
+                } else {
+                    throw new Error('Failed to load review');
+                }
+            } catch (error) {
+                console.error('Error loading review:', error);
+                updateStatus('Error loading review', 'status-empty');
+                displayError('Failed to connect to the server. Please try again.');
+                userMessageInput.disabled = true;
+                sendBtn.disabled = true;
+            }
+        }
+
+        function displayWelcomeMessage() {
+            chatMessages.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; color: #6c757d; text-align: center; padding: 40px 20px;">
+                    <div style="font-size: 40px;">👋</div>
+                    <p><strong>Welcome to AI Code Review Chat!</strong></p>
+                    <p>Ask me anything about your code review. Here are some example questions:</p>
+                    <div class="suggestion-chips">
+                        <div class="chip" onclick="sendPredefinedMessage('What are the critical security issues?')">🔒 Security Issues</div>
+                        <div class="chip" onclick="sendPredefinedMessage('How can I improve code quality?')">⚡ Code Quality</div>
+                        <div class="chip" onclick="sendPredefinedMessage('What performance improvements are recommended?')">🚀 Performance</div>
+                        <div class="chip" onclick="sendPredefinedMessage('What are the best practices I should follow?')">✨ Best Practices</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function displayMessages() {
+            chatMessages.innerHTML = '';
+            messages.forEach(msg => {
+                displayMessage(msg.role, msg.message, false);
+            });
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function displayMessage(role, content, animate = true) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            
+            if (animate) {
+                messageDiv.style.animation = 'slideIn 0.3s ease-out';
+            }
+
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = role === 'user' ? '👤' : '🤖';
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            // Format content with markdown-like syntax
+            let formattedContent = content
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/\n/g, '<br>');
+            
+            contentDiv.innerHTML = formattedContent;
+
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function displayTypingIndicator() {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant';
+            messageDiv.id = 'typing-indicator';
+
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = '🤖';
+
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'typing-indicator';
+            typingDiv.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(typingDiv);
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function removeTypingIndicator() {
+            const typing = document.getElementById('typing-indicator');
+            if (typing) {
+                typing.remove();
+            }
+        }
+
+        function displayError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+            chatMessages.appendChild(errorDiv);
+        }
+
+        function updateStatus(text, statusClass) {
+            statusBadge.textContent = text;
+            statusBadge.className = `status-badge ${statusClass}`;
+        }
+
+        async function sendMessage() {
+            const message = userMessageInput.value.trim();
+            if (!message || !currentReviewId) {
+                return;
+            }
+
+            // Add user message to display
+            displayMessage('user', message);
+            messages.push({ role: 'user', message });
+            userMessageInput.value = '';
+
+            // Show typing indicator
+            displayTypingIndicator();
+            sendBtn.disabled = true;
+            userMessageInput.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/chat/${currentReviewId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    removeTypingIndicator();
+                    displayMessage('assistant', data.message);
+                    messages.push({ role: 'assistant', message: data.message });
+                } else {
+                    removeTypingIndicator();
+                    const error = await response.json();
+                    displayError(error.detail || 'Failed to get response from AI');
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                removeTypingIndicator();
+                displayError('Failed to send message. Please try again.');
+            } finally {
+                sendBtn.disabled = false;
+                userMessageInput.disabled = false;
+                userMessageInput.focus();
+            }
+        }
+
+        function sendPredefinedMessage(message) {
+            userMessageInput.value = message;
+            sendMessage();
+        }
+
+        // Auto-focus on review ID input
+        reviewIdInput.focus();
+    </script>
+</body>
+</html>
