@@ -545,3 +545,131 @@ async def get_chat_history(review_id: str):
     except Exception as e:
         logger.error(f"Error retrieving chat history: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+# Kafka Configuration Validation Endpoints
+class KafkaConfigRequest(BaseModel):
+    """Request model for Kafka configuration validation"""
+    broker_url: Optional[str] = None
+    topic_prefix: Optional[str] = None
+    partitions: Optional[int] = None
+    replication_factor: Optional[int] = None
+    connection_timeout_ms: Optional[int] = None
+    batch_size: Optional[int] = None
+    
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "broker_url": "localhost:9092",
+                "topic_prefix": "code-review",
+                "partitions": 3,
+                "replication_factor": 2,
+                "connection_timeout_ms": 30000,
+                "batch_size": 16384
+            }
+        }
+    }
+
+
+@app.post("/kafka/validate", responses={
+    200: {"description": "Configuration validation complete"},
+    400: {"description": "Invalid configuration"}
+})
+async def validate_kafka_config(config: KafkaConfigRequest):
+    """
+    Validate Kafka configuration and provide detailed feedback.
+    
+    This endpoint validates your Kafka configuration and returns:
+    - ✅ PASS/❌ FAIL status
+    - 🔴 Critical errors that must be fixed
+    - ⚠️ Warnings about potential issues
+    - 💡 Suggestions for optimization
+    - 📋 Detailed breakdown of each setting
+    
+    Example configs:
+    - Development: localhost:9092, 1 partition, 1 replica
+    - Production: broker1:9092,broker2:9092,broker3:9092, 3 partitions, 2-3 replicas
+    """
+    try:
+        logger.info("Validating Kafka configuration")
+        
+        # Validate configuration
+        validation_result = kafka_handler.validate_kafka_config(config.dict(exclude_unset=True))
+        
+        logger.info(f"Kafka config validation completed: {validation_result['assessment']['status']}")
+        
+        return {
+            "status": "success",
+            "validation": validation_result,
+            "next_steps": validation_result["assessment"]["next_steps"]
+        }
+    
+    except Exception as e:
+        logger.error(f"Error validating Kafka config: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
+
+
+@app.get("/kafka/validate/examples")
+async def get_kafka_config_examples():
+    """
+    Get example Kafka configurations for different use cases.
+    
+    Returns pre-configured examples for:
+    - Development/Testing
+    - Production (single broker)
+    - Production (cluster with HA)
+    """
+    examples = {
+        "development": {
+            "name": "Development/Testing",
+            "description": "Single broker, minimal redundancy",
+            "config": {
+                "broker_url": "localhost:9092",
+                "topic_prefix": "code-review-dev",
+                "partitions": 1,
+                "replication_factor": 1,
+                "connection_timeout_ms": 30000,
+                "batch_size": 16384
+            },
+            "use_case": "Local development, testing, CI/CD pipelines"
+        },
+        "production_single": {
+            "name": "Production (Single Broker)",
+            "description": "Single broker with basic redundancy",
+            "config": {
+                "broker_url": "kafka.example.com:9092",
+                "topic_prefix": "code-review",
+                "partitions": 3,
+                "replication_factor": 1,
+                "connection_timeout_ms": 60000,
+                "batch_size": 65536
+            },
+            "use_case": "Small to medium deployments, acceptable downtime"
+        },
+        "production_cluster": {
+            "name": "Production (Cluster with HA)",
+            "description": "Multi-broker cluster with high availability",
+            "config": {
+                "broker_url": "broker1.example.com:9092,broker2.example.com:9092,broker3.example.com:9092",
+                "topic_prefix": "code-review",
+                "partitions": 6,
+                "replication_factor": 3,
+                "connection_timeout_ms": 60000,
+                "batch_size": 65536
+            },
+            "use_case": "Enterprise, requires high availability and data durability"
+        }
+    }
+    
+    return {
+        "status": "success",
+        "examples": examples,
+        "guidance": {
+            "broker_url": "Comma-separated list of Kafka broker addresses (host:port)",
+            "topic_prefix": "Base topic name for code review events",
+            "partitions": "Number of partitions (higher = more parallelism, default: 1)",
+            "replication_factor": "Number of copies per partition (2-3 recommended for HA)",
+            "connection_timeout_ms": "Connection timeout in milliseconds (30000-60000)",
+            "batch_size": "Batch size in bytes for messages (16384-65536)"
+        }
+    }
