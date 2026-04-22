@@ -543,15 +543,19 @@ class BitbucketIntegration:
         try:
             chatbot_html = create_interactive_chatbot_comment(review_id, review_summary)
             
-            comment_body = f"""
-🤖 **AI Code Review Chatbot** 
+            # Build comment body without nested f-strings to avoid escaping issues
+            overall_score = review_summary.get('overall_score', 'N/A')
+            critical_issues = review_summary.get('critical_issues', 0)
+            high_issues = review_summary.get('high_issues', 0)
+            
+            comment_body = f"""🤖 **AI Code Review Chatbot** 
 
 Ask questions about the review findings directly in this PR!
 
 **Review Stats:**
-- Overall Score: {review_summary.get('overall_score', 'N/A')}/100
-- Critical Issues: {review_summary.get('critical_issues', 0)}
-- High Issues: {review_summary.get('high_issues', 0)}
+- Overall Score: {overall_score}/100
+- Critical Issues: {critical_issues}
+- High Issues: {high_issues}
 
 {chatbot_html}
 
