@@ -771,9 +771,17 @@ IMPORTANT NOTES:
         automated_fixes = fix_generator.generate_fixes(top_issues)
 
         # Analyze project impact if full project context is requested
+        # Use environment variables as fallback if not provided in request
         project_impact_analysis = None
-        if request.analyze_full_project and request.workspace and request.repo_slug:
+        import os
+        workspace = request.workspace or os.getenv("BITBUCKET_WORKSPACE")
+        repo_slug = request.repo_slug or os.getenv("BITBUCKET_REPO_SLUG")
+        
+        if request.analyze_full_project and workspace and repo_slug:
             logger.info("Fetching full project context for impact analysis...")
+            # Create a modified request with the resolved workspace and repo_slug
+            request.workspace = workspace
+            request.repo_slug = repo_slug
             project_impact_analysis = self._analyze_project_impact(request)
 
         # Generate overall feedback (non-repetitive)
@@ -1474,7 +1482,9 @@ IMPORTANT NOTES:
             feedback_parts.append("### 🌍 Project Impact Analysis")
             feedback_parts.append("**Status:** Repository-wide analysis not performed")
             feedback_parts.append("")
-            feedback_parts.append("💡 **To enable full project impact analysis, add these fields to your request:**")
+            feedback_parts.append("💡 **To enable full project impact analysis:**")
+            feedback_parts.append("")
+            feedback_parts.append("**Option 1 - Via Request (for single review):**")
             feedback_parts.append("```json")
             feedback_parts.append("{")
             feedback_parts.append('  "analyze_full_project": true,')
@@ -1482,6 +1492,22 @@ IMPORTANT NOTES:
             feedback_parts.append('  "repo_slug": "your-repository-name"')
             feedback_parts.append("}")
             feedback_parts.append("```")
+            feedback_parts.append("")
+            feedback_parts.append("**Option 2 - Via Environment Variables (global):**")
+            feedback_parts.append("```bash")
+            feedback_parts.append("export BITBUCKET_WORKSPACE=your-workspace")
+            feedback_parts.append("export BITBUCKET_REPO_SLUG=your-repo")
+            feedback_parts.append("# Then set this header in next request:")
+            feedback_parts.append('{"analyze_full_project": true}')
+            feedback_parts.append("```")
+            feedback_parts.append("")
+            feedback_parts.append("**Current Status:**")
+            import os
+            workspace_set = bool(os.getenv("BITBUCKET_WORKSPACE"))
+            repo_set = bool(os.getenv("BITBUCKET_REPO_SLUG"))
+            feedback_parts.append(f"- BITBUCKET_WORKSPACE: {'✅ Set' if workspace_set else '❌ Not set'}")
+            feedback_parts.append(f"- BITBUCKET_REPO_SLUG: {'✅ Set' if repo_set else '❌ Not set'}")
+            feedback_parts.append(f"- BITBUCKET_TOKEN: {'✅ Set' if os.getenv('BITBUCKET_TOKEN') else '❌ Not set'}")
             feedback_parts.append("")
             feedback_parts.append("This will:")
             feedback_parts.append("- Fetch all files from your repository")
