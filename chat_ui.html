@@ -443,6 +443,10 @@
         // Get API base URL
         const API_BASE_URL = window.location.origin;
 
+        // Get Review ID from URL query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryReviewId = urlParams.get('id');
+
         // Initialize
         reviewIdInput.addEventListener('change', loadReview);
         reviewIdInput.addEventListener('keyup', (e) => {
@@ -456,6 +460,24 @@
             }
         });
         sendBtn.addEventListener('click', sendMessage);
+
+        // Auto-load review if ID provided in URL
+        function initializeChat() {
+            if (queryReviewId) {
+                console.log('Auto-loading review from URL:', queryReviewId);
+                reviewIdInput.value = queryReviewId;
+                loadReview();
+            } else {
+                reviewIdInput.focus();
+            }
+        }
+
+        // Initialize when page is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeChat);
+        } else {
+            initializeChat();
+        }
 
         async function loadReview() {
             const reviewId = reviewIdInput.value.trim();

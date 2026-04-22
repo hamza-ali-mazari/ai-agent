@@ -1077,12 +1077,16 @@ IMPORTANT NOTES:
         
         # Chat Link Section (Prominent at Top)
         if review_id:
+            # Get base URL from environment or use default
+            base_url = os.getenv('APP_BASE_URL', 'http://localhost:10000')
+            chat_link = f"{base_url}/chat?id={review_id}"
+            
             feedback_parts.append("### 💬 Chat with AI About This Review")
             feedback_parts.append(f"**Review ID:** `{review_id}`")
             feedback_parts.append("")
             feedback_parts.append("#### Quick Access Options:")
-            feedback_parts.append(f"- 🔗 **[Open Chat Interface](https://your-app.onrender.com/chat?id={review_id})** - Paste this Review ID to start chatting")
-            feedback_parts.append(f"- 📋 **Review ID to Use:** `{review_id}`")
+            feedback_parts.append(f"- 🔗 **[Open Chat Interface]({chat_link})** - Start chatting about this review")
+            feedback_parts.append(f"- 📋 **Manual Entry:** Paste Review ID `{review_id}` in chat interface")
             feedback_parts.append("")
             feedback_parts.append("Ask me anything about:")
             feedback_parts.append("- 🔒 Security vulnerabilities and fixes")
