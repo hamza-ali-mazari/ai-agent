@@ -539,31 +539,49 @@ class BitbucketIntegration:
             logger.error(f"Failed to post summary: {response.status_code}")
 
     async def post_interactive_chatbot(self, workspace: str, repo_slug: str, pr_id: int, review_id: str, review_summary: Dict[str, Any]):
-        """Post interactive chatbot UI as a comment to the PR"""
-        from services.bitbucket_chatbot_ui import create_interactive_chatbot_comment
-        
+        """Post interactive chatbot info as a comment to the PR"""
         try:
-            chatbot_html = create_interactive_chatbot_comment(review_id, review_summary)
-            
-            # Build comment body without nested f-strings to avoid escaping issues
+            # Extract variables for the comment
             overall_score = review_summary.get('overall_score', 'N/A')
             critical_issues = review_summary.get('critical_issues', 0)
             high_issues = review_summary.get('high_issues', 0)
+            medium_issues = review_summary.get('medium_issues', 0)
+            total_issues = critical_issues + high_issues + medium_issues
             
-            comment_body = f"""🤖 **AI Code Review Chatbot** 
+            # Create a text-based chatbot info (HTML not supported in Bitbucket comments)
+            comment_body = f"""## 💬 AI Code Review Chatbot
 
-Ask questions about the review findings directly in this PR!
+**Ask questions about the review findings directly!**
 
-**Review Stats:**
-- Overall Score: {overall_score}/100
-- Critical Issues: {critical_issues}
-- High Issues: {high_issues}
+### Review Statistics
+- **Overall Score:** `{overall_score}/100`
+- **Total Issues Found:** `{total_issues}`
+- 🔴 **Critical:** {critical_issues}
+- 🟠 **High:** {high_issues}
+- 🟡 **Medium:** {medium_issues}
 
-{chatbot_html}
+### How to Use
+This AI chatbot can answer questions about:
+- 🔒 **Security Issues** - What are the critical security vulnerabilities?
+- ⚡ **Code Quality** - How can I improve code quality?
+- 🚀 **Performance** - What performance improvements are recommended?
+- ✨ **Best Practices** - What best practices should I follow?
+
+### Access Chatbot via API
+**Review ID:** `{review_id}`
+
+Use the review endpoint to interact with the chatbot:
+```
+POST /chat/{review_id}
+Content-Type: application/json
+
+{{"message": "What are the critical issues?"}}
+```
+
+The AI will provide detailed explanations about code issues, suggested fixes, and recommendations for improvement.
 
 ---
-*This chatbot allows you to get detailed explanations about code issues, performance suggestions, and security vulnerabilities found in your PR.*
-"""
+*This interactive chatbot analyzes code quality, security, performance, and best practices in your PR.*"""
             
             # Post to Bitbucket using the same method as post_review_summary
             headers = self.get_auth_headers()
@@ -582,7 +600,7 @@ Ask questions about the review findings directly in this PR!
             if response.status_code not in [201, 200]:
                 logger.error(f"Failed to post chatbot comment: {response.status_code}")
             else:
-                logger.info(f"Posted interactive chatbot to PR #{pr_id}")
+                logger.info(f"Posted interactive chatbot info to PR #{pr_id}")
             
         except Exception as e:
             logger.warning(f"Failed to post interactive chatbot: {str(e)}")
