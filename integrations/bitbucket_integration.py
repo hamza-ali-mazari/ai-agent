@@ -122,8 +122,9 @@ class BitbucketIntegration:
         # Emit review started event
         if self.kafka_handler:
             try:
+                from services.kafka_config import ReviewEventType
                 self.kafka_handler.create_review_event(
-                    event_type="review:started",
+                    event_type=ReviewEventType.REVIEW_STARTED,
                     review_id=f"review_{datetime.now().isoformat()}",
                     pr_id=pr_id,
                     workspace=workspace,
@@ -243,8 +244,9 @@ class BitbucketIntegration:
             # Emit failure event
             if self.kafka_handler:
                 try:
+                    from services.kafka_config import ReviewEventType
                     self.kafka_handler.create_review_event(
-                        event_type="review:failed",
+                        event_type=ReviewEventType.REVIEW_FAILED,
                         review_id=f"review_{datetime.now().isoformat()}",
                         pr_id=pr_id,
                         workspace=workspace,
