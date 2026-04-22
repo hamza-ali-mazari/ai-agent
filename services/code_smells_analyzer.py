@@ -391,11 +391,14 @@ class CodeSmellsAnalyzer:
         file_path: str,
         lines: List[str]
     ) -> List[Dict[str, Any]]:
-        """Detect code duplication (DRY violations)."""
+        """Detect code duplication (DRY violations) including exact duplicate functions."""
         smells = []
         seen_blocks = defaultdict(list)
 
-        # Look for duplicate lines (simple heuristic)
+        # First: Detect exact duplicate FUNCTIONS/METHODS (NEW!)
+        smells.extend(self._detect_duplicate_functions(file_path, lines))
+
+        # Second: Look for duplicate lines (simple heuristic)
         for line_num, line in enumerate(lines, 1):
             stripped = line.strip()
             
@@ -423,6 +426,109 @@ class CodeSmellsAnalyzer:
                 })
 
         return smells
+
+    def _detect_duplicate_functions(
+        self,
+        file_path: str,
+        lines: List[str]
+    ) -> List[Dict[str, Any]]:
+        """Detect exact duplicate functions/methods (entire function definitions)."""
+        smells = []
+        
+        # Extract all functions/methods from the code
+        functions = self._extract_functions(lines)
+        
+        # Look for duplicate function definitions
+        function_signatures = defaultdict(list)
+        
+        for func_name, func_content, start_line, end_line in functions:
+            # Use function content as key to detect exact duplicates
+            func_key = func_content.strip()
+            function_signatures[func_key].append({
+                'name': func_name,
+                'start': start_line,
+                'end': end_line,
+                'content': func_content
+            })
+        
+        # Report exact duplicate functions
+        for func_content, occurrences in function_signatures.items():
+            if len(occurrences) >= 2:  # Exact duplicate found
+                # Extract function name for better reporting
+                func_name = occurrences[0]['name']
+                line_numbers = [f"{o['start']}-{o['end']}" for o in occurrences]
+                
+                smells.append({
+                    "file": file_path,
+                    "line": occurrences[0]['start'],
+                    "category": "maintainability",
+                    "type": "duplicate_function",
+                    "severity": "high",
+                    "title": f"🔴 DUPLICATE FUNCTION: '{func_name}' defined {len(occurrences)} times!",
+                    "description": f"Function/method '{func_name}' is defined identically {len(occurrences)} times at lines: {', '.join(line_numbers)}. This is likely a copy-paste error.",
+                    "code_snippet": f"Function '{func_name}' appears at:\n" + "\n".join([f"  Lines {o['start']}-{o['end']}" for o in occurrences]),
+                    "suggestion": f"Remove the duplicate definitions at lines {', '.join(line_numbers[1:])}. Keep only the first definition at line {occurrences[0]['start']}.",
+                    "impact": "HIGH: Wastes memory, creates maintenance burden, and causes confusion. Any future changes must be made in multiple places."
+                })
+        
+        return smells
+
+    def _extract_functions(self, lines: List[str]) -> List[Tuple[str, str, int, int]]:
+        """
+        Extract all function/method definitions from code.
+        
+        Returns:
+            List of tuples: (function_name, function_content, start_line, end_line)
+        """
+        functions = []
+        
+        # Patterns for function definitions (Python, JavaScript, Java, Go, etc.)
+        function_start_pattern = r'^\s*(async\s+)?(def|function|func|public|private|protected)?\s*(\w+)\s*\('
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            match = re.match(function_start_pattern, line)
+            
+            if match:
+                func_name = match.group(3)
+                start_line = i + 1  # 1-indexed
+                
+                # Determine the indentation level of this function
+                base_indent = len(line) - len(line.lstrip())
+                
+                # Extract function body
+                func_lines = [line]
+                i += 1
+                
+                # Continue collecting lines until we find a line at same/lower indent level
+                # (or end of file)
+                while i < len(lines):
+                    current_line = lines[i]
+                    
+                    # Skip empty lines within function
+                    if current_line.strip() == '':
+                        func_lines.append(current_line)
+                        i += 1
+                        continue
+                    
+                    current_indent = len(current_line) - len(current_line.lstrip())
+                    
+                    # If we find a line at the same or lower indent level, we're done
+                    if current_indent <= base_indent and current_line.strip() != '':
+                        break
+                    
+                    func_lines.append(current_line)
+                    i += 1
+                
+                end_line = i  # 1-indexed end
+                func_content = '\n'.join(func_lines)
+                
+                functions.append((func_name, func_content, start_line, end_line))
+            else:
+                i += 1
+        
+        return functions
 
     def _detect_missing_validation(
         self,
