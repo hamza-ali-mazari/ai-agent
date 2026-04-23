@@ -606,25 +606,26 @@ IMPORTANT NOTES:
             logger.info("Returning cached review result")
             return self.cache[cache_key]
 
-        # COMPREHENSIVE ANALYSIS: Use complete file content if provided (analyzes entire files)
-        # Otherwise fall back to diff-based analysis (only changed lines)
-        if request.full_files and request.analyze_complete_files:
-            logger.info("Analyzing COMPLETE file content (comprehensive security & code quality review)")
-            files_info = request.full_files
-        else:
-            logger.info("Analyzing git diff (changed lines only)")
-            files_info = self._parse_diff_files(request.diff)
+        # ANALYSIS PRIORITY ORDER:
+        # 1. FIRST: Analyze git diff (changed lines) - ALWAYS (primary review)
+        # 2. THEN: Analyze complete files (if provided) - additional context (secondary review)
+        # This ensures PR reviewer checks what changed first, then looks at full context
+        
         file_reviews = []
         all_comments = []
         total_tokens = TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+        
+        # STEP 1: ANALYZE DIFF (Changed Lines) - PRIMARY REVIEW
+        logger.info("STEP 1: Analyzing git diff (changed lines only) - PRIMARY REVIEW")
+        diff_files_info = self._parse_diff_files(request.diff)
+        diff_file_paths = {f['path']: f for f in diff_files_info}
+        
+        for file_info in diff_files_info:
+            logger.info(f"[DIFF ANALYSIS] Analyzing file changes: {file_info['path']}")
 
-        for file_info in files_info:
-            logger.info(f"Analyzing file: {file_info['path']}")
-
-            # Generate prompt and call AI
-            # Pass analyze_complete flag to tell the model whether we're analyzing complete files or just diffs
-            analyze_complete = request.analyze_complete_files and request.full_files is not None
-            prompt = self._generate_review_prompt(file_info, config, analyze_complete=analyze_complete)
+            # Generate prompt for DIFF analysis (changed lines only)
+            # analyze_complete=False means focus on changes only
+            prompt = self._generate_review_prompt(file_info, config, analyze_complete=False)
             ai_response, file_tokens = self._call_ai_model(prompt)
             
             # Accumulate tokens
@@ -692,6 +693,63 @@ IMPORTANT NOTES:
 
             file_reviews.append(file_review)
             all_comments.extend(comments)
+        
+        logger.info(f"STEP 1 COMPLETE: Found {len(all_comments)} issues in diff analysis")
+        
+        # STEP 2: ANALYZE COMPLETE FILES (if provided) - SECONDARY REVIEW for additional context
+        if request.full_files and request.analyze_complete_files:
+            logger.info("STEP 2: Analyzing complete file content - SECONDARY REVIEW for additional context")
+            
+            for complete_file_info in request.full_files:
+                file_path = complete_file_info['path']
+                
+                # Skip if this file wasn't in the diff (no changes)
+                if file_path not in diff_file_paths:
+                    logger.info(f"[COMPLETE FILE ANALYSIS] Skipping {file_path} (not in diff)")
+                    continue
+                
+                logger.info(f"[COMPLETE FILE ANALYSIS] Analyzing complete file: {file_path}")
+                
+                # Generate prompt for COMPLETE FILE analysis
+                # analyze_complete=True means analyze the whole file, not just changes
+                prompt = self._generate_review_prompt(complete_file_info, config, analyze_complete=True)
+                ai_response, file_tokens = self._call_ai_model(prompt)
+                
+                # Accumulate tokens
+                total_tokens = total_tokens + file_tokens
+                
+                # Parse AI response from complete file analysis
+                comments_data = ai_response.get('comments', [])
+                new_comments = [
+                    self._create_review_comment(comment, file_path, request.diff)
+                    for comment in comments_data
+                ]
+                
+                # Limit new comments
+                new_comments = new_comments[:config.max_comments_per_file]
+                
+                # Filter to only keep NEW issues not already found in diff analysis
+                # This avoids duplicate reporting
+                existing_issue_titles = {c.title for f_review in file_reviews 
+                                        if f_review.file_path == file_path 
+                                        for c in f_review.comments}
+                
+                additional_comments = [
+                    c for c in new_comments 
+                    if c.title not in existing_issue_titles
+                ]
+                
+                if additional_comments:
+                    logger.info(f"Found {len(additional_comments)} ADDITIONAL issues from complete file analysis")
+                    
+                    # Update the file review with additional comments
+                    for file_review in file_reviews:
+                        if file_review.file_path == file_path:
+                            file_review.comments.extend(additional_comments[:config.max_comments_per_file - len(file_review.comments)])
+                            all_comments.extend(additional_comments)
+                            break
+        
+        logger.info(f"STEP 2 COMPLETE: Total issues found: {len(all_comments)}")
 
         # Calculate summary statistics
         severity_counts = {
@@ -749,12 +807,13 @@ IMPORTANT NOTES:
         security_analysis = self._generate_consolidated_security_analysis(all_comments)
 
         # ADVANCED ANALYSIS: Run comprehensive code quality and performance analyzers
-        test_coverage_analysis = test_coverage_analyzer.analyze_test_coverage(files_info, all_files={})
-        breaking_changes_analysis = breaking_changes_detector.detect_breaking_changes(files_info)
-        complexity_analysis = complexity_analyzer.analyze_complexity(files_info)
-        performance_analysis = performance_analyzer.analyze_performance(files_info)
-        migration_analysis = migration_analyzer.analyze_migrations(files_info)
-        code_smells_analysis = code_smells_analyzer.analyze_code_smells(files_info)
+        # Using diff files for analysis (what actually changed)
+        test_coverage_analysis = test_coverage_analyzer.analyze_test_coverage(diff_files_info, all_files={})
+        breaking_changes_analysis = breaking_changes_detector.detect_breaking_changes(diff_files_info)
+        complexity_analysis = complexity_analyzer.analyze_complexity(diff_files_info)
+        performance_analysis = performance_analyzer.analyze_performance(diff_files_info)
+        migration_analysis = migration_analyzer.analyze_migrations(diff_files_info)
+        code_smells_analysis = code_smells_analyzer.analyze_code_smells(diff_files_info)
 
         # Generate automated fix suggestions for top issues
         top_issues = []
