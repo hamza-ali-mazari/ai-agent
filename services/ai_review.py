@@ -559,16 +559,8 @@ IMPORTANT NOTES:
                         diff_content, file_path, location.line_start, location.line_end
                     )
 
-            # Format inline suggestion with proper diff markers
+            # Use inline suggestion as-is without adding extra diff markers
             inline_suggestion = comment_data.get('inline_suggestion')
-            if inline_suggestion and not inline_suggestion.startswith(('-', '+')):
-                # Add diff markers for clarity if not already present
-                lines = inline_suggestion.split('\n')
-                formatted_lines = []
-                for line in lines:
-                    if line.strip():
-                        formatted_lines.append(f"+ {line}") if not line.startswith('-') else formatted_lines.append(f"- {line}")
-                inline_suggestion = '\n'.join(formatted_lines)
 
             return ReviewComment(
                 id=f"{file_path}_{hash(str(comment_data))}",
@@ -1080,43 +1072,9 @@ IMPORTANT NOTES:
 
         feedback_parts = []
         
-        # CODE RABBIT STYLE HEADER WITH TOKEN INFO
+        # CODE RABBIT STYLE HEADER
         feedback_parts.append("## 📋 Code Review Analysis")
         feedback_parts.append("")
-        
-        # Chat Link Section (Prominent at Top)
-        if review_id:
-            # Get base URL from environment or use default
-            # Use CHATBOT_API_URL as primary, fallback to APP_BASE_URL, then default
-            base_url = os.getenv('CHATBOT_API_URL') or os.getenv('APP_BASE_URL', 'http://localhost:10000')
-            chat_link = f"{base_url}/chat?id={review_id}"
-            
-            feedback_parts.append("### 💬 Chat with AI About This Review")
-            feedback_parts.append(f"**Review ID:** `{review_id}`")
-            feedback_parts.append("")
-            feedback_parts.append("#### Quick Access Options:")
-            feedback_parts.append(f"- 🔗 **[Open Chat Interface]({chat_link})** - Start chatting about this review")
-            feedback_parts.append(f"- 📋 **Manual Entry:** Paste Review ID `{review_id}` in chat interface")
-            feedback_parts.append("")
-            feedback_parts.append("Ask me anything about:")
-            feedback_parts.append("- 🔒 Security vulnerabilities and fixes")
-            feedback_parts.append("- ⚡ Code quality improvements")
-            feedback_parts.append("- 🚀 Performance optimizations")
-            feedback_parts.append("- ✨ Best practices and patterns")
-            feedback_parts.append("")
-            feedback_parts.append("---")
-            feedback_parts.append("")
-        
-        # Token Tracker Summary Card (Prominent at Top)
-        if summary.tokens_used:
-            feedback_parts.append("### 📊 Analysis Summary")
-            feedback_parts.append(f"| Metric | Value |")
-            feedback_parts.append(f"|--------|-------|")
-            feedback_parts.append(f"| 🔹 **Tokens Used** | `{summary.tokens_used:,}` |")
-            feedback_parts.append(f"| 💰 **Estimated Cost** | `{summary.estimated_cost}` |")
-            feedback_parts.append(f"| 📁 **Files Analyzed** | `{len(files)}` |")
-            feedback_parts.append(f"| 📊 **Total Comments** | `{summary.total_comments}` |")
-            feedback_parts.append("")
         
         # CODE QUALITY SCORECARD (Code Rabbit Style)
         feedback_parts.append("### 🎯 Code Quality Metrics")
@@ -1252,33 +1210,7 @@ IMPORTANT NOTES:
                 feedback_parts.append(f"**Severity Breakdown:** {' | '.join(dep_breakdown)}")
             feedback_parts.append("")
 
-        # TEST COVERAGE ANALYSIS SECTION
-        if test_coverage and test_coverage.get('test_coverage_level') != 'not_applicable':
-            feedback_parts.append("---")
-            feedback_parts.append("")
-            feedback_parts.append("### 🧪 Test Coverage Analysis")
-            coverage_level = test_coverage.get('test_coverage_level', 'unknown')
-            coverage_emoji = {
-                'excellent': '✅',
-                'good': '🟢',
-                'partial': '🟡',
-                'not_tested': '🔴',
-                'not_applicable': '⚪'
-            }
-            emoji = coverage_emoji.get(coverage_level, '❓')
-            coverage_pct = test_coverage.get('coverage_percentage', 0)
-            feedback_parts.append(f"**Coverage Level:** {emoji} {coverage_level.upper()} ({coverage_pct}%)")
-            feedback_parts.append("")
 
-            if test_coverage.get('risky_untested_changes'):
-                feedback_parts.append(f"**⚠️ Untested Changes:** {len(test_coverage['risky_untested_changes'])} file(s)")
-                for f in test_coverage['risky_untested_changes'][:3]:
-                    feedback_parts.append(f"- {f.get('file', 'Unknown')}: {f.get('reason', 'No tests')}")
-                feedback_parts.append("")
-
-            for rec in test_coverage.get('recommendations', [])[:2]:
-                feedback_parts.append(f"💡 {rec}")
-            feedback_parts.append("")
 
         # BREAKING CHANGES SECTION
         feedback_parts.append("---")
@@ -1577,23 +1509,7 @@ IMPORTANT NOTES:
                 feedback_parts.append(f"💡 {fix.get('explanation', 'See code comparison')}")
                 feedback_parts.append("")
 
-        # FINAL TOKEN TRACKER STATS
-        feedback_parts.append("---")
-        feedback_parts.append("")
-        
-        # REMOVED: "Code Issues Summary & Fixes" section 
-        # (detailed issues are posted separately as inline comments via post_review_comments)
-        # This section was duplicating information already shown in individual PR comments
-        
-        # ANALYSIS EXECUTION STATS
-        feedback_parts.append("### 💻 Analysis Execution Stats")
-        if summary.tokens_used:
-            feedback_parts.append(f"- 🔹 **Total Tokens Used:** {summary.tokens_used:,} tokens")
-            feedback_parts.append(f"- 💰 **API Cost:** {summary.estimated_cost} (GPT-4o pricing)")
-            feedback_parts.append(f"- ⚙️ **Model Used:** gpt-4o")
-            feedback_parts.append(f"- 📁 **Files Processed:** {len(files)}")
-            feedback_parts.append(f"- 📊 **Total Issues Found:** {summary.total_comments}")
-        feedback_parts.append("")
+        # No final token stats - removed to minimize output
 
         # Join with proper formatting
         return "\n".join(feedback_parts)
