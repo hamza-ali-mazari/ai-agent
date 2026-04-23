@@ -1087,7 +1087,8 @@ IMPORTANT NOTES:
         # Chat Link Section (Prominent at Top)
         if review_id:
             # Get base URL from environment or use default
-            base_url = os.getenv('APP_BASE_URL', 'http://localhost:10000')
+            # Use CHATBOT_API_URL as primary, fallback to APP_BASE_URL, then default
+            base_url = os.getenv('CHATBOT_API_URL') or os.getenv('APP_BASE_URL', 'http://localhost:10000')
             chat_link = f"{base_url}/chat?id={review_id}"
             
             feedback_parts.append("### 💬 Chat with AI About This Review")

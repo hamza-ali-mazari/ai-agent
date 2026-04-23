@@ -35,7 +35,7 @@ class BitbucketIntegration:
         self.base_url = (
             base_url
             or os.getenv('AI_REVIEW_API_URL')
-            or 'http://localhost:8000'
+            or os.getenv('AI_REVIEW_API_URL', 'http://localhost:8000')
         )
         self.kafka_handler = kafka_handler
         self.bitbucket_username = os.getenv("BITBUCKET_USERNAME")

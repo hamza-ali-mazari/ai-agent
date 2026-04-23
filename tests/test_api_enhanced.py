@@ -27,7 +27,7 @@ class TestHealthAndBasic:
         assert "version" in data, "Version should be present"
         assert "azure_openai_available" in data, "Azure availability should be present"
         assert "azure_openai_health_message" in data, "Health message should be present"
-        print(f"✅ Health check passed: {data['status']} ({response.status_code})")
+        logging.info(f"✅ Health check passed: {data['status']} ({response.status_code})")
 
     def test_review_empty_diff(self):
         """✅ Test review with empty diff - should fail gracefully."""
@@ -35,7 +35,7 @@ class TestHealthAndBasic:
         assert response.status_code == 400, "Empty diff should return 400"
         detail = response.json()["detail"].lower()
         assert "empty" in detail, "Should mention empty diff"
-        print("✅ Empty diff validation passed")
+        logging.info("✅ Empty diff validation passed")
 
 
 class TestCodeReview:
@@ -78,8 +78,8 @@ index 1234567..abcdef0 100644
         assert "tokens_used" in summary, "Should track token usage"
         assert "estimated_cost" in summary, "Should show estimated cost"
         
-        print(f"✅ Python review passed - Score: {summary['overall_score']}/100")
-        print(f"   Tokens: {summary.get('tokens_used', 0)} | Cost: {summary.get('estimated_cost', 'N/A')}")
+        logging.info(f"✅ Python review passed - Score: {summary['overall_score']}/100")
+        logging.debug(f"   Tokens: {summary.get('tokens_used', 0)} | Cost: {summary.get('estimated_cost', 'N/A')}")
 
     @pytest.mark.skipif(not azure_available, reason="Azure OpenAI not available")
     def test_javascript_code_review(self):

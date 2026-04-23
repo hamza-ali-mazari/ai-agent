@@ -66,7 +66,7 @@ async def startup_health_check():
             model=model_name,
             messages=[{"role": "system", "content": "Health check."}],
             temperature=0.0,
-            max_tokens=1
+            max_tokens=100  # Adequate token budget for health check response
         )
 
         if not response or not getattr(response, 'choices', None):
