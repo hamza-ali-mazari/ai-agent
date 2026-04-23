@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import hashlib
+import uuid
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from openai import AzureOpenAI
@@ -49,8 +50,12 @@ if not (os.getenv("AZURE_OPENAI_MODEL") or os.getenv("AZURE_OPENAI_DEPLOYMENT"))
         "Environment variable AZURE_OPENAI_MODEL or AZURE_OPENAI_DEPLOYMENT must be set"
     )
 
-# Log Azure OpenAI configuration for debugging
-logger.info(f"Azure OpenAI Endpoint: {os.getenv('AZURE_OPENAI_ENDPOINT')}")
+# Log Azure OpenAI configuration for debugging (masked sensitive info)
+azure_endpoint = os.getenv('AZURE_OPENAI_ENDPOINT', '')
+if azure_endpoint:
+    # Mask the endpoint - only show domain, not full URL
+    masked_endpoint = '/'.join(azure_endpoint.split('/')[:3]) + '/***'
+    logger.info(f"Azure OpenAI Endpoint: {masked_endpoint}")
 logger.info(f"Azure OpenAI API Version: {os.getenv('AZURE_OPENAI_API_VERSION')}")
 logger.info(
     "Azure OpenAI Model: %s",
@@ -783,8 +788,10 @@ IMPORTANT NOTES:
             request.repo_slug = repo_slug
             project_impact_analysis = self._analyze_project_impact(request)
 
-        # Generate review ID first so it can be included in feedback
-        review_id = f"review_{datetime.now().isoformat()}"
+        # Generate review ID using UUID (prevents URL encoding issues with colons/dots)
+        # Format: review_<uuid> for cleaner URL handling in chatbot
+        review_id = f"review_{str(uuid.uuid4())}"
+        logger.info(f"Generated review session ID: {review_id}")
         
         # Generate overall feedback (non-repetitive)
         overall_feedback = self._generate_overall_feedback(
@@ -827,6 +834,9 @@ IMPORTANT NOTES:
 
         # Cache the result
         self.cache[cache_key] = response
+        
+        logger.info(f"Review completed with ID: {response.review_id}")
+        logger.info(f"Review stored in chatbot service for interactive discussion")
 
         return response
 

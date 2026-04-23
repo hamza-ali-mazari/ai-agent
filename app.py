@@ -14,6 +14,7 @@ from services.token_tracker import token_tracker
 from services.chatbot_service import chatbot_service
 from models.review import ReviewConfig
 from integrations.bitbucket_integration import BitbucketIntegration, BitbucketWebhookPayload
+from config.service_endpoints import get_cors_config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,13 +26,15 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Enable CORS for chat UI access
+# Enable CORS with proper configuration from environment variables
+cors_config = get_cors_config()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development (restrict in production)
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=cors_config['allow_origins'],
+    allow_credentials=cors_config['allow_credentials'],
+    allow_methods=cors_config['allow_methods'],
+    allow_headers=cors_config['allow_headers'],
+    max_age=cors_config['max_age'],
 )
 
 # Initialize integrations and services

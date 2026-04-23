@@ -7,8 +7,10 @@ Easy way to interact with the chatbot after performing a code review
 import requests
 import json
 import sys
+import os
 
-BASE_URL = "http://localhost:10000"
+# Use environment variable or default for development
+BASE_URL = os.getenv('CHATBOT_API_URL', 'http://localhost:10000')
 
 def perform_code_review():
     """Perform a code review and get review_id"""

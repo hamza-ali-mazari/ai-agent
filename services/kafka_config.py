@@ -7,9 +7,16 @@ Optimized message suggestions and event streaming for code review workflows.
 import json
 import logging
 import re
+import os
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from enum import Enum
+from config.kafka_defaults import (
+    KAFKA_CONFIG,
+    SESSION_TIMEOUT_THRESHOLD_MS,
+    SESSION_TIMEOUT_RECOMMENDED_MS,
+    validate_kafka_broker_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +34,28 @@ class KafkaConfigHandler:
     """Handles Kafka event streaming and optimized message suggestions."""
 
     def __init__(self, broker_url: Optional[str] = None):
-        self.broker_url = broker_url or "localhost:9092"
-        self.topic_prefix = "code-review"
+        # Use provided URL, environment variable, or default from config
+        self.broker_url = (
+            broker_url
+            or os.getenv('KAFKA_BROKER_URL')
+            or KAFKA_CONFIG['broker_url']
+        )
+        
+        # Validate broker URL format
+        if not validate_kafka_broker_url(self.broker_url):
+            raise ValueError(
+                f'Invalid Kafka broker URL format: {self.broker_url}. '
+                f'Expected format: "host:port" or "host1:port1,host2:port2". '
+                f'Ports must be 1-65535. '
+                f'Set KAFKA_BROKER_URL environment variable for custom values.'
+            )
+        
+        self.topic_prefix = os.getenv('KAFKA_TOPIC_PREFIX') or KAFKA_CONFIG['topic_prefix']
         self.events = []
         self.config_validation = {}
+        
+        logger.info(f"Kafka broker configured: {self.broker_url}")
+        logger.info(f"Kafka topic prefix: {self.topic_prefix}")
 
     def validate_kafka_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -141,7 +166,89 @@ class KafkaConfigHandler:
             else:
                 validation_result["config_details"]["batch_size"] = batch_validation["details"]
         
-        # 7. CRITICAL: Check for failure scenarios
+        # 7. Validate Producer Configuration
+        acks = config.get("acks")
+        if acks is not None:
+            if acks not in ['0', '1', 'all', 0, 1]:
+                validation_result["warnings"].append({
+                    "field": "acks",
+                    "message": f"Invalid acks value: {acks}",
+                    "valid_values": ['0', '1', 'all'],
+                    "explanation": "0=no wait, 1=leader wait, all=all replicas wait"
+                })
+        else:
+            validation_result["suggestions"].append({
+                "field": "acks",
+                "message": "Producer acks not configured",
+                "recommendation": "Set to 'all' for durability (prevents data loss on broker failure)"
+            })
+        
+        # Validate retries
+        retries = config.get("retries")
+        if retries is not None:
+            try:
+                retries_num = int(retries)
+                if retries_num < 1:
+                    validation_result["warnings"].append({
+                        "field": "retries",
+                        "message": f"Low retry count: {retries_num}",
+                        "recommendation": "Set retries >= 3 for transient failure handling"
+                    })
+            except ValueError:
+                validation_result["errors"].append({
+                    "field": "retries",
+                    "message": f"retries must be integer, got: {retries}"
+                })
+        else:
+            validation_result["suggestions"].append({
+                "field": "retries",
+                "recommendation": "Set to 3-5 for production (handles transient failures)"
+            })
+        
+        # Validate idempotence
+        enable_idempotence = config.get("enable.idempotence")
+        if enable_idempotence is False or enable_idempotence == "false":
+            validation_result["warnings"].append({
+                "field": "enable.idempotence",
+                "severity": "HIGH",
+                "message": "Idempotence disabled - duplicate messages possible on retries",
+                "recommendation": "Enable for exactly-once-delivery semantics"
+            })
+        
+        # 8. Validate Consumer Configuration
+        auto_commit = config.get("enable.auto.commit")
+        if auto_commit is True or auto_commit == "true":
+            validation_result["failure_scenarios"].append({
+                "severity": "HIGH",
+                "scenario": "❌ Auto-commit without processing = data loss risk",
+                "message": "Consumer commits offsets automatically but may crash before processing"
+            })
+        
+        # 9. Validate Security Configuration
+        security_protocol = config.get("security.protocol", "").upper()
+        if not security_protocol or security_protocol == "PLAINTEXT":
+            validation_result["warnings"].append({
+                "field": "security.protocol",
+                "severity": "HIGH",
+                "message": "No encryption configured for Kafka messages",
+                "recommendation": "Set security.protocol=SSL or SASL_SSL for production"
+            })
+        
+        if security_protocol in ["SASL_SSL", "SASL_PLAINTEXT"]:
+            if not config.get("sasl.mechanism"):
+                validation_result["errors"].append({
+                    "field": "sasl.mechanism",
+                    "message": "SASL enabled but mechanism not set",
+                    "valid_values": ["PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512"]
+                })
+            
+            if not config.get("sasl.username") or not config.get("sasl.password"):
+                validation_result["errors"].append({
+                    "field": "sasl.credentials",
+                    "message": "SASL enabled but username/password not configured"
+                })
+        
+        # 10. CRITICAL: Check for failure scenarios
         failure_checks = self._detect_failure_scenarios(config)
         if failure_checks["scenarios"]:
             validation_result["failure_scenarios"] = failure_checks["scenarios"]
@@ -263,7 +370,7 @@ class KafkaConfigHandler:
         if session_timeout:
             try:
                 timeout_ms = int(session_timeout)
-                if timeout_ms > 10000:  # More than 10 seconds
+                if timeout_ms > SESSION_TIMEOUT_THRESHOLD_MS:  # More than 10 seconds
                     result["scenarios"].append({
                         "severity": "MEDIUM",
                         "scenario": "❌ High Session Timeout",
@@ -273,9 +380,9 @@ class KafkaConfigHandler:
                         "ai_suggestion": {
                             "title": "Reduce Session Timeout for Faster Detection",
                             "current_value": timeout_ms,
-                            "recommended_value": "6000",
-                            "example": "'session.timeout.ms': 6000",
-                            "explanation": "6 seconds allows faster failure detection and rebalancing. Standard for production systems."
+                            "recommended_value": SESSION_TIMEOUT_RECOMMENDED_MS,
+                            "example": f"'session.timeout.ms': {SESSION_TIMEOUT_RECOMMENDED_MS}",
+                            "explanation": f"{SESSION_TIMEOUT_RECOMMENDED_MS/1000:.1f} seconds allows faster failure detection and rebalancing. Standard for production systems."
                         }
                     })
                     result["critical_warnings"].append({

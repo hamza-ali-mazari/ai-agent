@@ -30,8 +30,13 @@ class BitbucketWebhookPayload(BaseModel):
 class BitbucketIntegration:
     """Bitbucket integration for AI Code Review Engine."""
 
-    def __init__(self, base_url: str = "http://localhost:8000", is_server: bool = False, kafka_handler: Optional[Any] = None):
-        self.base_url = base_url
+    def __init__(self, base_url: Optional[str] = None, is_server: bool = False, kafka_handler: Optional[Any] = None):
+        # Use provided URL, environment variable, or default for development
+        self.base_url = (
+            base_url
+            or os.getenv('AI_REVIEW_API_URL')
+            or 'http://localhost:8000'
+        )
         self.kafka_handler = kafka_handler
         self.bitbucket_username = os.getenv("BITBUCKET_USERNAME")
         self.bitbucket_token = os.getenv("BITBUCKET_TOKEN")  # App password or access token
